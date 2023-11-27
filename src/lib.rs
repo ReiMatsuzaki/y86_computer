@@ -124,10 +124,6 @@ struct Fetched {
 }
 #[derive(Debug, Clone)]
 struct Decoded {
-    code_fn: CodeFn,
-    val_p: usize,
-    val_c: u64,
-
     val_a: u64,
     val_b: u64,
     dst_e: usize,
@@ -135,23 +131,10 @@ struct Decoded {
 }
 #[derive(Debug, Clone)]
 struct Executed {
-    code_fn: CodeFn,
-    val_a: u64,
-    val_c: u64,
-    val_p: usize,
-    dst_e: usize,
-    dst_m: usize,
-
     val_e: u64,
 }
 #[derive(Debug)]
 pub struct Memoried {
-    code_fn: CodeFn,
-    val_c: u64,
-    val_p: usize,
-    dst_e: usize,
-    val_e: u64,
-    dst_m: usize,
     val_m: u64,
 }
 pub struct SeqProcessor {
@@ -209,7 +192,7 @@ impl SeqProcessor {
             val_p,
         };
     }
-    fn decode(&self, fetched: Fetched) -> Decoded {
+    fn decode(&self, fetched: &Fetched) -> Decoded {
         let ra = fetched.ra as usize;
         let rb = fetched.rb as usize;
         let rsp = Y8R::RSP as usize;
@@ -237,20 +220,17 @@ impl SeqProcessor {
         let val_a: u64 = self.regs[src_a];
         let val_b: u64 = self.regs[src_b];
         return Decoded {
-            code_fn: fetched.code_fn,
-            val_p: fetched.val_p,
-            val_c: fetched.val_c,
             val_a,
             val_b,
             dst_e,
             dst_m,
         };
     }
-    fn execute(&mut self, decoded: Decoded) -> Executed {
-        let va = decoded.val_a;
-        let vb = decoded.val_b;
-        let vc = decoded.val_c;
-        let val_e: u64 = match decoded.code_fn {
+    fn execute(&mut self, f: &Fetched, d: &Decoded) -> Executed {
+        let va = d.val_a;
+        let vb = d.val_b;
+        let vc = f.val_c;
+        let val_e: u64 = match f.code_fn {
             CodeFn::HALT => 0,
             CodeFn::NOP => 0,
             CodeFn::RRMOVQ => va,
@@ -269,7 +249,7 @@ impl SeqProcessor {
             CodeFn::PUSHQ => vb - 8, // R[%rsp] - 8
             CodeFn::POPQ => vb + 8,  // R[%rsp] + 8
         };
-        match decoded.code_fn {
+        match f.code_fn {
             CodeFn::OPQ(_) => {
                 self.zf = if val_e == 0 { 0x1 } else { 0x0 };
                 self.sf = if val_e > !val_e { 0x1 } else { 0x0 };
@@ -278,66 +258,52 @@ impl SeqProcessor {
             _ => {}
         }
         return Executed {
-            code_fn: decoded.code_fn.clone(),
-            val_a: decoded.val_a,
-            val_c: decoded.val_c,
-            val_p: decoded.val_p,
-            dst_e: decoded.dst_e,
-            dst_m: decoded.dst_m,
-
             val_e,
         };
     }
-    fn memory(&mut self, executed: Executed) -> Memoried {
-        let val_m = match executed.code_fn {
+    fn memory(&mut self, f: &Fetched, d: &Decoded, e: &Executed) -> Memoried {
+        let val_m = match f.code_fn {
             CodeFn::HALT => 0,
             CodeFn::NOP => 0,
             CodeFn::RRMOVQ => 0,
             CodeFn::IRMOVQ => 0,
             CodeFn::RMMOVQ => {
-                let addr = executed.val_e as usize;
-                write_words(&mut self.memory, addr, executed.val_a);
+                let addr = e.val_e as usize;
+                write_words(&mut self.memory, addr, d.val_a);
                 0
             },
             CodeFn::MRMOVQ => {
-                let addr = executed.val_e as usize;
+                let addr = e.val_e as usize;
                 read_as_words(&self.memory, addr)
             }
             CodeFn::OPQ(_) => 0,
             CodeFn::JXX(_) => 0,
             CodeFn::CALL => {
-                let addr = executed.val_e as usize;
-                write_words(&mut self.memory, addr, executed.val_p as u64);
+                let addr = e.val_e as usize;
+                write_words(&mut self.memory, addr, f.val_p as u64);
                 0
             }
             CodeFn::PUSHQ => {
-                let addr = executed.val_e as usize;
-                write_words(&mut self.memory, addr, executed.val_a as u64);
+                let addr = e.val_e as usize;
+                write_words(&mut self.memory, addr, d.val_a as u64);
                 0                
             }
             CodeFn::RET | CodeFn::POPQ => {
-                let addr = executed.val_a as usize;
+                let addr = d.val_a as usize;
                 read_as_words(&self.memory, addr)
             }
         };
         return Memoried {
-            code_fn: executed.code_fn,
-            val_c: executed.val_c,
-            dst_e: executed.dst_e,
-            val_e: executed.val_e,
-            val_p: executed.val_p,
-            dst_m: executed.dst_m,
-
             val_m,
         };
     }
-    fn write(&mut self, memoried: Memoried) {
-        self.regs[memoried.dst_e as usize] = memoried.val_e;
-        self.regs[memoried.dst_m as usize] = memoried.val_m;
-        let val_c = memoried.val_c as usize;
-        let val_p = memoried.val_p;
-        let val_m = memoried.val_m as usize;
-        self.pc = match memoried.code_fn {
+    fn write(&mut self, f: &Fetched, d: &Decoded, e: &Executed, m: &Memoried) {
+        self.regs[d.dst_e as usize] = e.val_e;
+        self.regs[d.dst_m as usize] = m.val_m;
+        let val_c = f.val_c as usize;
+        let val_p = f.val_p;
+        let val_m = m.val_m as usize;
+        self.pc = match f.code_fn {
             CodeFn::CALL => val_c,
             CodeFn::RET => val_m,
             CodeFn::JXX(j) => {
@@ -347,7 +313,7 @@ impl SeqProcessor {
                 };
                 if jump {val_c} else {val_p}
             }
-            _ => memoried.val_p
+            _ => f.val_p
         };
     }
     pub fn cycle(&mut self) {
@@ -355,19 +321,19 @@ impl SeqProcessor {
         if self.verbose >= 2 {
             println!("{:?}", fetched);
         }
-        let decoded = self.decode(fetched);
+        let decoded = self.decode(&fetched);
         if self.verbose >= 2 {
             println!("{:?}", decoded);
         }
-        let executed = self.execute(decoded);
+        let executed = self.execute(&fetched, &decoded);
         if self.verbose >= 2 {
             println!("{:?}", executed);
         }
-        let memoried = self.memory(executed);
+        let memoried = self.memory(&fetched, &decoded, &executed);
         if self.verbose >= 2 {
             println!("{:?}", memoried);
         }
-        self.write(memoried);
+        self.write(&fetched, &decoded, &executed, &memoried);
         if self.verbose >= 1 {
             println!(
                 "pc=0x{0:X}, RAX=0x{1:X}, RBX=0x{2:X}, RCX=0x{3:X}, RDX=0x{4:X}, RSP=0x{5:X}, ZF={6}",
