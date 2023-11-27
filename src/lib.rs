@@ -385,3 +385,319 @@ pub fn make_machine(verbose: i64) -> SeqProcessor {
     };
     return machine;
 }
+
+pub mod y86_64 {
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    pub enum Reg {
+        RAX = 0x0,
+        RCX = 0x1,
+        RDX = 0x2,
+        RBX = 0x3,
+        RSP = 0x4,
+        RSI = 0x5,
+        RDI = 0x6,
+        R8 = 0x7,
+        R9 = 0x8,
+        R10 = 0x9,
+        R11 = 0xA,
+        RNONE = 0xF,
+    }
+    #[derive(Debug, PartialEq, Clone)]
+    pub enum OpqFn {
+        Add, Sub, And, Or
+    }
+    #[derive(Debug, PartialEq)]
+    pub enum JxxFn {
+        Je, Jne
+    }    
+    #[derive(Debug, PartialEq)]
+    pub enum Inst {
+        HALT,
+        NOP,
+        RRMOVQ(Reg, Reg),
+        IRMOVQ(Reg, u64),
+        RMMOVQ(Reg, Reg, u64),
+        MRMOVQ(Reg, Reg, u64),
+        OPQ(OpqFn, Reg, Reg),
+        JXX(JxxFn, u64),
+        CALL(u64),
+        RET,
+        PUSHQ(Reg),
+        POPQ(Reg),
+    }
+    impl Inst {
+        fn byte_length(&self) -> usize {
+            match self {
+                Inst::HALT => 1,
+                Inst::NOP => 1,
+                Inst::RRMOVQ(_, _) => 2,
+                Inst::IRMOVQ(_, _) => 10,
+                Inst::RMMOVQ(_, _, _) => 10,
+                Inst::MRMOVQ(_, _, _) => 10,
+                Inst::OPQ(_, _, _) => 10,
+                Inst::JXX(_, _) => 9,
+                Inst::CALL(_) => 9,
+                Inst::RET => 1,
+                Inst::PUSHQ(_) => 2,
+                Inst::POPQ(_) => 2,
+            }
+        }
+        fn to_byte(&self) -> [u8; 10] {
+            let (f, rab, c) = match self {
+                Inst::HALT => (0x00, None, None),
+                Inst::NOP => (0x10, None, None),
+                Inst::RRMOVQ(ra, rb) => (0x20, Some((*ra, *rb)), None),
+                Inst::IRMOVQ(rb, c) => (0x30, Some((Reg::RNONE, *rb)), Some(c)),
+                Inst::RMMOVQ(ra, rb, c) => (0x40, Some((*ra, *rb)), Some(c)),
+                Inst::MRMOVQ(ra, rb, c) => (0x50, Some((*ra, *rb)), Some(c)),
+                Inst::OPQ(fnc, ra, rb) => {
+                    let x = 0x60 + match fnc {
+                        OpqFn::Add => 0x00,
+                        OpqFn::Sub => 0x01,
+                        OpqFn::And => 0x02,
+                        OpqFn::Or => 0x03,
+                    };
+                    (x, Some((*ra, *rb)), None)
+                }
+                Inst::JXX(j, c) => {
+                    let x = 0x70 + match j {
+                        JxxFn::Je => 0x03,
+                        JxxFn::Jne => 0x04,
+                    };
+                    (x, None, Some(c))
+                },
+                Inst::CALL(c) => (0x80, None, Some(c)),
+                Inst::RET => (0x90, None, None),
+                Inst::PUSHQ(ra) => (0xA0, Some((*ra, Reg::RNONE)), None),
+                Inst::POPQ(ra) => (0xB0, Some((*ra, Reg::RNONE)), None),
+            };
+
+            let mut xs: [u8; 10] = [0; 10];
+            xs[0] = f;
+            if let Some((ra, rb)) = rab {
+                xs[1] = ((ra as u8) << 4) + (rb as u8);
+            }
+            if let Some(cval) = c {
+                let addr = match rab {
+                    None => 1,
+                    Some(_) => 2,
+                };
+                let bs = cval.to_be_bytes();
+                for i in 0..8 {
+                    xs[addr + 7 - i] = bs[i];
+                }
+            }
+            return xs;
+        }
+    }
+
+    pub fn from_byte(xs: [u8; 10]) -> Option<Inst> {
+        None //FIXME
+    }
+    pub fn split_byte(x: u8) -> (u8, u8) {
+        return (x >> 4, x & 0x0F);
+    } 
+    pub fn bytes_to_word(xs: [u8; 8]) -> u64 {
+        let mut x: u64 = 0;
+        for i in 0..8 {
+            let m = xs[i] as u64;
+            x += m << 8 * i;
+        }
+        x
+    }
+    pub fn insts_to_bytes(insts: &Vec<Inst>) -> Vec<u8> {
+        vec![]
+    }
+}
+
+pub mod assembler {
+    extern crate regex;
+    use regex::Regex;
+    use crate::y86_64::{Inst, Reg, OpqFn, insts_to_bytes, JxxFn};
+    use std::collections::hash_map::HashMap;
+    #[derive(Debug, PartialEq)]
+    pub enum Sentence<'a> {
+        Label(&'a String),
+        CompInst(Inst),
+        IncompInst(Inst, &'a String),
+    }
+    pub struct Assembler {
+        label_dict: HashMap<String, usize>
+    }
+    impl Assembler {
+        pub fn read_line(&mut self, line: &String) -> Option<Sentence> {
+            let line = line.trim_start();
+            match line.find(":") {
+                Some(i) => self.read_line_label(line, i),
+                None => line.find(" ").and_then( |i| {
+                    self.read_line_inst(line, i)
+                })
+            }
+        }
+        fn add_label(&mut self, label: &str) -> &String {
+            if !self.label_dict.contains_key(label) {
+                self.label_dict.insert(String::from(label), 0);
+            }
+            self.label_dict.get_key_value(label).map(|(k, _)| k).unwrap()
+        }
+        fn read_line_label(&mut self, line: &str, i: usize) -> Option<Sentence> {
+            let label = &line[0..i].trim();
+            let k = self.add_label(label);
+            Some(Sentence::Label(k))
+        }
+        fn parse_args_ra(line: &str) -> Option<Reg> {
+            Self::read_register(line.trim())
+        }
+        fn parse_args_rab(line: &str) -> Option<(Reg, Reg)> {
+            let re = regex::Regex::new("(.+),(.+)").unwrap();
+            re.captures(line)
+            .and_then(|cap| {
+                let ra = Self::read_register(&cap[0]);
+                let rb = Self::read_register(&cap[1]);
+                ra.zip(rb)
+            })
+        }
+        fn parse_args_rabd(&mut self, line: &str) -> Option<(Reg, Reg, Result<u64, &String>)> {
+            let re = regex::Regex::new(r"(.+),(.+)\((.+)\)").unwrap();
+            re.captures(line)
+            .and_then(|cap| {
+                let ra = Self::read_register(&cap[0]);
+                let rb = Self::read_register(&cap[2]);
+                let d = u64::from_str_radix(&cap[1], 10)
+                    .map_err(|_| self.add_label(&cap[1]));
+                ra.zip(rb).map(|(a, b)| (a, b, d))
+            })
+        }
+        fn parse_args_vrb(line: &str) -> Option<(Reg, u64)> {
+            None
+        }
+        fn parse_args_drba(&mut self, line: &str) -> Option<(Reg, Reg, &String)> {
+            None
+        }
+        fn parse_args_d(&mut self, line: &str) -> Option<&String> {
+            None
+        }
+        fn parse_opq_fn(line: &str) -> Option<OpqFn> {
+            match line {
+                "addq" => Some(OpqFn::Add),
+                "subq" => Some(OpqFn::Sub),
+                "andq" => Some(OpqFn::And),
+                "orq" =>  Some(OpqFn::Or),
+                _ => None
+            }
+        }
+        fn parse_jxx_fn(line: &str) -> Option<JxxFn> {
+            match line {
+                "je" => Some(JxxFn::Je),
+                "jne" => Some(JxxFn::Jne),
+                _ => None
+            }
+        }
+        fn read_register(line: &str) -> Option<Reg> {
+            match line {
+                "%rax" => Some(Reg::RAX),
+                "%rcx" => Some(Reg::RCX),
+                "%rdx" => Some(Reg::RDX),
+                "%rbx" => Some(Reg::RBX),
+                "%rsp" => Some(Reg::RSP),
+                "%rsi" => Some(Reg::RSI),
+                "%rdi" => Some(Reg::RDI),
+                "%r8" => Some(Reg::R8),
+                "%r9" => Some(Reg::R9),
+                "%r10" => Some(Reg::R10),
+                "%r11" => Some(Reg::R11),
+                _ => None
+            }
+        }
+        fn read_line_inst(&mut self, line: &str, i: usize) -> Option<Sentence> {
+            let inst_str = &line[0..i];
+            let args = &line[i..];
+            match inst_str {
+                "halt" => Some(Sentence::CompInst(Inst::HALT)),
+                "nop" => Some(Sentence::CompInst(Inst::NOP)),
+                "rrmovq" => Self::parse_args_rab(args)
+                            .map(|(ra, rb)| 
+                                Sentence::CompInst(Inst::RRMOVQ(ra, rb))),
+                "irmovq" => Self::parse_args_vrb(args)
+                            .map(|(rb, v)| 
+                                Sentence::CompInst(Inst::IRMOVQ(rb, v))),
+                "rmmovq" => self.parse_args_rabd(args)
+                            .map(|(ra, rb, d)| {
+                                match d {
+                                    Result::Ok(i) => Sentence::CompInst(Inst::RMMOVQ(ra, rb, i)),
+                                    Result::Err(k) => Sentence::IncompInst(Inst::RMMOVQ(ra, rb, 0), k),
+                                }}),
+                "mrmovq" => self.parse_args_drba(args)
+                            .map(|(ra, rb, d)| {
+                                Sentence::IncompInst(Inst::RMMOVQ(ra, rb, 0), d)}),
+                "addq" |
+                "subq" |
+                "andq" |
+                "orq" => Self::parse_args_rab(args)
+                         .zip(Self::parse_opq_fn(inst_str))
+                         .map(|((ra, rb), f)| {
+                                Sentence::CompInst(Inst::OPQ(f, ra, rb))}),
+                "je" | 
+                "jne" => self.parse_args_d(args)
+                         .zip(Self::parse_jxx_fn(inst_str))
+                         .map(|(d, f)| {
+                            Sentence::IncompInst(Inst::JXX(f, 0), d)}),
+                "call" => self.parse_args_d(args)
+                          .map(|d| {
+                              Sentence::IncompInst(Inst::CALL(0), d)}),
+                "ret" => Some(Sentence::CompInst(Inst::RET)),
+                "pushq" => Self::parse_args_ra(args)
+                           .map(|ra| Sentence::CompInst(Inst::PUSHQ(ra))),
+                "popq" => Self::parse_args_ra(args)
+                          .map(|ra| Sentence::CompInst(Inst::POPQ(ra))),
+                _ => None
+            }
+        }
+        
+        pub fn read_lines(&self, line: &Vec<String>) -> Vec<Sentence> {
+            vec![]
+        }
+        pub fn build_label_dict(&self, sentences: &Vec<Sentence>) -> HashMap<String, usize> {
+            for line in sentences {
+
+            }
+            HashMap::new()
+        }        
+        pub fn complete_inst(&self, sentences: &Vec<Sentence>, label_dict: HashMap<String, usize>) -> Vec<Inst> {
+            vec![]
+        }
+        pub fn assemble_lines(&self, lines: &Vec<String>) -> Vec<u8> {
+            let sents = self.read_lines(lines);
+            let label_dict = self.build_label_dict(&sents);
+            let insts = self.complete_inst(&sents, label_dict);
+            insts_to_bytes(&insts)
+        }
+    }
+    pub fn make_assembler() -> Assembler {
+        let label_dict = HashMap::new();
+        return Assembler { label_dict }
+    }
+
+    #[test]
+    fn assembler_test() {
+        let mut assembler = make_assembler();
+        assert_eq!(Some(Sentence::CompInst(Inst::RET)),
+                   assembler.read_line(&String::from("   ret   ")));
+
+        assert_eq!(Some(Sentence::CompInst(Inst::PUSHQ(Reg::RAX))),
+                   assembler.read_line(&String::from("pushq %rax")));
+
+        assert_eq!(Some(Sentence::CompInst(Inst::PUSHQ(Reg::RAX))),
+                   assembler.read_line(&String::from("done:")));
+
+
+        let line = String::from("irmovq $9, %rdx");
+        assert_eq!(
+            Some(Sentence::CompInst(Inst::IRMOVQ(Reg::RDX, 9))),
+            assembler.read_line(&line));
+        let line = String::from("rmmovq    %rsp,   1000 (  %rbx)");
+        assert_eq!(
+            Some(Sentence::CompInst(Inst::RMMOVQ(Reg::RSP, Reg::RBX, 1000))),
+            assembler.read_line(&line));
+    }
+}

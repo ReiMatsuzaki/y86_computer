@@ -1,4 +1,4 @@
-use csapp_y86_64::{encode_codefn, decode_codefn, split_byte, make_machine, Y8R};
+use csapp_y86_64::{encode_codefn, decode_codefn, split_byte, make_machine, Y8R, assembler};
 
 extern crate csapp_y86_64;
 
@@ -78,3 +78,14 @@ fn seq_processor_test() {
     assert_eq!(0x40, machine.get_memory(0x78 as usize));
     assert_eq!(0x09, machine.get_register(Y8R::RAX));
 }
+
+// #[test]
+// fn assembler_test() {
+//     let a = assembler::make_assembler();
+//     let line = String::from("irmovq $9, %rdx");
+//     let xs = assembler.assemble_line(&line);
+//     assert_eq!(0x30, xs[0]);
+//     assert_eq!(0xF2, xs[1]);
+//     assert_eq!(0x09, xs[2]);
+//     assert_eq!(0x00, xs[3]);
+// }
