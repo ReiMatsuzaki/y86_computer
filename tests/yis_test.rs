@@ -1,6 +1,6 @@
-use csapp_y86_64::{encode_codefn, decode_codefn, split_byte, make_machine, Y8R};
+use csapp::{encode_codefn, decode_codefn, split_byte, make_machine, Y8R};
 
-extern crate csapp_y86_64;
+extern crate csapp;
 
 #[test]
 fn codefn_test() {

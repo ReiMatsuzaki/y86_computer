@@ -292,7 +292,7 @@ fn assemble_one(
     }
 }
 
-fn assemble_many(
+pub fn assemble_many(
     statements: &Vec<Statement>,
     symbol_table: &HashMap<String, u64>,
 ) -> Result<Vec<u8>, String> {
