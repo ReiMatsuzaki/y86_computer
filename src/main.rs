@@ -2,7 +2,7 @@ use std::{env, io, fs};
 
 // use csapp_y86_64::make_machine;
 use csapp::utils::print_bytes;
-mod assembler;
+mod yas;
 
 fn main() -> io::Result<()>{
     // let ra: u8 = 0x0A;
@@ -17,7 +17,7 @@ fn main() -> io::Result<()>{
     }
     let filename = &args[1];
     let contents = fs::read_to_string(filename)?;
-    match assembler::assemble(&contents) {
+    match yas::assemble(&contents) {
         Result::Ok(xs) => {
             print_bytes(&xs);
             // let machine = make_machine(0);
