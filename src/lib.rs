@@ -1,3 +1,19 @@
+pub mod utils {
+    pub fn print_bytes(xs: &Vec<u8>) {
+        let maxj = xs.len() / 16;
+        for j in 0..maxj {
+            print!("{0:<2}: ", j);
+            for i in 0..16 {
+                let addr = 16 * j + i;
+                if addr < xs.len() {
+                    print!("{0:>02X} ", xs[16 * j + i]);
+                }
+            }
+            println!("");
+        }
+    }
+}
+
 // Y86_64 simulator
 #[derive(Debug, PartialEq, Clone)]
 pub enum Y8R {

@@ -227,7 +227,7 @@ fn ass_reg(ra: Option<&Register>, rb: Option<&Register>) -> u8 {
             },
         }
     }
-    f(ra) << 4 + f(rb)
+    (f(ra) << 4) + f(rb)
 }
 
 fn ass_val(v: &Value, symbol_table: &HashMap<String, u64>) -> Result<[u8; 8], String> {

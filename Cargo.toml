@@ -1,5 +1,5 @@
 [package]
-name = "csapp-y86_64"
+name = "csapp"
 version = "0.1.0"
 edition = "2021"
 
