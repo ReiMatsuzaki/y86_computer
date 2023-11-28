@@ -1,0 +1,12 @@
+  subq %rdx %rbx
+  subq %rbx %rbx
+  IRMOVQ 128 %rsp
+  RMMOVQ %rsp 100(%rbx)
+  PUSHQ %rdx
+  POPQ %rax
+  je done
+  call proc
+done:
+  halt
+proc:
+  ret

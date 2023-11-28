@@ -1,4 +1,4 @@
-use csapp_y86_64::{encode_codefn, decode_codefn, split_byte, make_machine, Y8R, assembler};
+use csapp_y86_64::{encode_codefn, decode_codefn, split_byte, make_machine, Y8R};
 
 extern crate csapp_y86_64;
 
