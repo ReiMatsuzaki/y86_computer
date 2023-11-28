@@ -5,13 +5,13 @@ use crate::yas::{Statement, Value, Register};
 #[derive(Debug, PartialEq)]
 enum Token {
     Op(char),
-    Num(i64),
+    Num(u64),
     Id(String),
 }
 
 #[derive(PartialEq)]
 enum Ast {
-    Op(i64, Op, i64),
+    Op(u64, Op, u64),
     // Num(i64),
     // Id(String),
     // Op(Op, Box<Ast>, Box<Ast>),
@@ -52,7 +52,7 @@ fn tokenize(src: &str) -> Vec<Token> {
                         _ => break
                     }
                 }
-                tokens.push(Token::Num(num.parse::<i64>().unwrap()));
+                tokens.push(Token::Num(num.parse::<u64>().unwrap()));
             },
             _ => {
                 let mut id = String::new();

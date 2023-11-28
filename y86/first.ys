@@ -1,5 +1,6 @@
+  irmovq 9 %rdx
+  irmovq 21 %rbx
   subq %rdx %rbx
-  subq %rbx %rbx
   irmovq 128 %rsp
   rmmovq %rsp 100(%rbx)
   pushq %rdx
@@ -10,3 +11,5 @@ done:
   halt
 proc:
   ret
+
+

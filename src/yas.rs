@@ -48,7 +48,7 @@ impl FromStr for Register {
 
 #[derive(Debug, PartialEq)]
 pub enum Value {
-    Integer(i64),
+    Integer(u64),
     Label(String),
 }
 
@@ -57,7 +57,7 @@ impl FromStr for Value {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let num_str = input.trim();
-        if let Ok(num) = num_str.parse::<i64>() {
+        if let Ok(num) = num_str.parse::<u64>() {
             Ok(Value::Integer(num))
         } else if num_str.chars().all(char::is_alphabetic) {
             Ok(Value::Label(num_str.to_string()))
@@ -79,7 +79,7 @@ impl FromStr for Address {
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = input.split(|c| c == '(' || c == ')').collect();
         if parts.len() == 3 {
-            match parts[0].parse::<i64>() {
+            match parts[0].parse::<u64>() {
                 Ok(offset) => {
                     let register = parts[1]
                         .parse::<Register>()
@@ -130,7 +130,7 @@ pub enum Statement {
     Popq(Register),
 }
 
-pub fn parse_statement(input: &str) -> Result<Statement, String> {
+fn parse_statement(input: &str) -> Result<Statement, String> {
     match input.find(":") {
         Some(i) => Ok(Statement::Label(input[..i].to_string())),
         None => parse_statement_2(input),
@@ -173,7 +173,7 @@ pub fn parse_body(body: &str) -> Result<Vec<Statement>, String> {
     Ok(statements)
 }
 
-pub fn byte_length(statement: &Statement) -> u64 {
+fn byte_length(statement: &Statement) -> u64 {
     match statement {
         Statement::Label(_) => 0,
         Statement::Halt => 1,
@@ -232,7 +232,7 @@ fn ass_reg(ra: Option<&Register>, rb: Option<&Register>) -> u8 {
 
 fn ass_val(v: &Value, symbol_table: &HashMap<String, u64>) -> Result<[u8; 8], String> {
     let x: u64 = match v {
-        Value::Integer(_) => 0,
+        Value::Integer(i) => *i,
         Value::Label(s) => symbol_table
             .get(s)
             .ok_or(format!("failed to find symbol: {}", s))?
@@ -280,9 +280,9 @@ fn assemble_one(
             ])
         }
         Statement::Addq(ra, rb) => Result::Ok(vec![0x60, ass_reg(Some(ra), Some(rb))]),
-        Statement::Subq(ra, rb) => Result::Ok(vec![0x60, ass_reg(Some(ra), Some(rb))]),
-        Statement::Andq(ra, rb) => Result::Ok(vec![0x61, ass_reg(Some(ra), Some(rb))]),
-        Statement::Orq(ra, rb) => Result::Ok(vec![0x62, ass_reg(Some(ra), Some(rb))]),
+        Statement::Subq(ra, rb) => Result::Ok(vec![0x61, ass_reg(Some(ra), Some(rb))]),
+        Statement::Andq(ra, rb) => Result::Ok(vec![0x62, ass_reg(Some(ra), Some(rb))]),
+        Statement::Orq(ra, rb) => Result::Ok(vec![0x63, ass_reg(Some(ra), Some(rb))]),
         Statement::Je(v) => f_v(0x73, v, symbol_table),
         Statement::Jne(v) => f_v(0x74, v, symbol_table),
         Statement::Call(v) => f_v(0x80, v, symbol_table),
@@ -304,22 +304,44 @@ pub fn assemble_many(
     Result::Ok(xs)
 }
 
-pub fn assemble(body: &str) -> Result<Vec<u8>, String> {
-    let statements = parse_body(body)?;
+pub fn code(statements: &Vec<Statement>) -> Result<Vec<u8>, String> {
     let symbol_table = build_symbol_table(&statements);
     assemble_many(&statements, &symbol_table)
 }
+
+// fn assemble(body: &str) -> Result<Vec<u8>, String> {
+//     let statements = parse_body(body)?;
+//     code(&statements)
+// }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    fn test_ass_val() {
+        let v = Value::Integer(9);
+        let st = HashMap::new();
+        let calc = ass_val(&v, &st);
+        let expe: [u8; 8] = [9, 0, 0, 0, 0, 0, 0, 0];
+        assert_eq!(Result::Ok(expe), calc);
+
+        let v = Value::Label(String::from("apple"));
+        let mut st = HashMap::new();
+        st.insert(String::from("apple"), 13);
+        let calc = ass_val(&v, &st);
+        let expe: [u8; 8] = [13, 0, 0, 0, 0, 0, 0, 0];
+        assert_eq!(Result::Ok(expe), calc);        
+    }
+
+    #[test]
     fn test_assemble() {
         let input = "halt";
         let expe = Result::Ok(vec![0x00]);
-        let calc = assemble(input);
-        let calc = calc;
+        let calc = parse_body(input);
+        let calc= calc.and_then(|x| code(&x));
+        // let calc = assemble(input);
+        // let calc = calc;
         assert_eq!(expe, calc);
     }
 

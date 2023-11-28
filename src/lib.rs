@@ -1,6 +1,16 @@
 pub mod utils {
     pub fn print_bytes(xs: &Vec<u8>) {
-        let maxj = xs.len() / 16;
+        let maxj = 1 + xs.len() / 16;
+        print!("    ");
+        for i in 0..16 {
+            print!(" {0:X} ", i);
+        }
+        println!("");
+        print!("----");
+        for _ in 0..16 {
+            print!("---");
+        }
+        println!("");
         for j in 0..maxj {
             print!("{0:<2}: ", j);
             for i in 0..16 {
