@@ -57,9 +57,16 @@ fn main() -> io::Result<()> {
         println!("\nbytes:");
         print_bytes(&bytes);
     } else if command == "run" {
-        let mut machine = yis::make_machine(1);
+        let mut machine = yis::make_machine(0);
+        println!("\nload bytes into memory");
         machine.load(0, &bytes);
+
+        println!("machine start");
         machine.start();
+
+        println!("machine halt.");
+        println!("\nregisters:");
+        machine.print_registers();
     } else {
         panic!("unexpected command")
     }

@@ -1,5 +1,3 @@
-use csapp::utils::print_bytes;
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Y8R {
@@ -306,7 +304,7 @@ impl SeqProcessor {
             _ => f.val_p,
         };
     }
-    fn print_registers(&self) {
+    pub fn print_registers(&self) {
         println!("pc=0x{0:0>2X}", self.pc);
         println!("RAX=0x{0:X}, RBX=0x{1:X}, RCX=0x{2:X}, RDX=0x{3:X}, RSP=0x{4:X}, RSI=0x{5:X}, RDI=0x{6:X}",
             self.get_register(Y8R::RAX),
@@ -317,7 +315,7 @@ impl SeqProcessor {
             self.get_register(Y8R::RSI),
             self.get_register(Y8R::RDI),
         );
-        println!("R8=0x{0:X}, R9=0x{1:X}, R10=0x{2:X}, R11=0x{3:X}",
+        println!(" R8=0x{0:X},  R9=0x{1:X}, R10=0x{2:X}, R11=0x{3:X}",
             self.regs[Y8R::R8 as usize],
             self.regs[Y8R::R9 as usize],
             self.regs[Y8R::R10 as usize],
@@ -362,11 +360,6 @@ impl SeqProcessor {
                 break;
             }
         }
-        println!("machine halt.");
-        println!("\nregisters:");
-        self.print_registers();
-        println!("\nmemory:");
-        print_bytes(&Vec::from(self.memory));
     }
     // pub fn get_memory(&self, i: usize) -> u8 {
     //     return self.memory[i];
