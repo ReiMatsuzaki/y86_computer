@@ -156,13 +156,17 @@ pub enum Statement {
 }
 
 fn parse_statement(input: &str) -> Result<Statement, String> {
+    let input = match input.find("//") {
+        Some(i) => input[..i].trim(),
+        None => input.trim(),
+    };
     match input.find(":") {
         Some(i) => Ok(Statement::Label(input[..i].to_string())),
-        None => parse_statement_2(input),
+        None => parse_instrument(input),
     }
 }
 
-fn split_inst(input: &str) -> Vec<&str> {
+fn split_instrument(input: &str) -> Vec<&str> {
     let input = input.trim_start();
     match input.find(" ") {
         None => vec![input],
@@ -180,11 +184,8 @@ fn split_inst(input: &str) -> Vec<&str> {
     }
 }
 
-fn parse_statement_2(input: &str) -> Result<Statement, String> {
-    let parts: Vec<&str> = split_inst(input);
-        // .trim() // 前後の空白を削除
-        // .split_whitespace() // 空白で分割
-        // .collect();
+fn parse_instrument(input: &str) -> Result<Statement, String> {
+    let parts: Vec<&str> = split_instrument(input);
     match parts.as_slice() {
         ["halt"] => Ok(Statement::Halt),
         ["nop"] => Ok(Statement::Nop),
@@ -435,7 +436,7 @@ mod tests {
 
     #[test]
     fn test_parse_halt() {
-        assert_eq!(parse_statement("halt"), Ok(Statement::Halt));
+        assert_eq!(parse_statement("halt   //comment"), Ok(Statement::Halt));
     }
 
     #[test]
