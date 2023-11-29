@@ -12,7 +12,7 @@ pub mod utils {
         }
         println!("");
         for j in 0..maxj {
-            print!("{0:<2}: ", j);
+            print!("{0:<2X}: ", j);
             for i in 0..16 {
                 let addr = 16 * j + i;
                 if addr < xs.len() {

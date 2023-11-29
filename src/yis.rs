@@ -1,3 +1,5 @@
+use csapp::utils::print_bytes;
+use std::fmt;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Y8R {
@@ -6,12 +8,31 @@ pub enum Y8R {
     RDX = 0x2,
     RBX = 0x3,
     RSP = 0x4,
-    RSI = 0x5,
-    RDI = 0x6,
-    R8 = 0x7,
-    R9 = 0x8,
-    R10 = 0x9,
-    R11 = 0xA,
+    RBP = 0x5,
+    RSI = 0x6,
+    RDI = 0x7,
+    R8 = 0x8,
+    R9 = 0x9,
+    R10 = 0xA,
+    R11 = 0xB,
+}
+
+fn get_register(x: u8) -> Option<Y8R> {
+    match x {
+        0x0 => Some(Y8R::RAX),
+        0x1 => Some(Y8R::RCX),
+        0x2 => Some(Y8R::RDX),
+        0x3 => Some(Y8R::RBX),
+        0x4 => Some(Y8R::RSP),
+        0x5 => Some(Y8R::RBP),
+        0x6 => Some(Y8R::RSI),
+        0x7 => Some(Y8R::RDI),
+        0x8 => Some(Y8R::R8),
+        0x9 => Some(Y8R::R9),
+        0xA => Some(Y8R::R10),
+        0xB => Some(Y8R::R11),
+        _ => None,
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -106,6 +127,21 @@ struct Fetched {
     val_p: usize,
 }
 
+impl fmt::Display for Fetched {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn g(r: u8) -> String {
+            match get_register(r) {
+                Some(r) => format!("{:?}", r),
+                None => "None".to_string(),
+            }
+        }
+        let ra = g(self.ra);
+        let rb = g(self.rb);
+        write!(f, "code_fn= {:?}, ra: {1:?}, rb: {2:?}, c: 0x{3:X}", 
+               self.code_fn, ra, rb, self.val_c)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Decoded {
     val_a: u64,
@@ -132,7 +168,9 @@ pub struct SeqProcessor {
     of: u8,
     memory: [u8; 1024],
     stat: Y8S,
+
     verbose: i64,
+    watch_memory_range: Option<(usize, usize)>,
 }
 
 impl SeqProcessor {
@@ -171,7 +209,8 @@ impl SeqProcessor {
             CodeFn::PUSHQ => (self.pc + 2, self.pc + 2),
             CodeFn::POPQ => (self.pc + 2, self.pc + 2),
         };
-        let val_c: u64 = self.memory[c0].into();
+        // let val_c: u64 = self.memory[c0].into();
+        let val_c: u64 = read_as_words(&self.memory, c0);
         return Fetched {
             code_fn,
             ra,
@@ -306,12 +345,13 @@ impl SeqProcessor {
     }
     pub fn print_registers(&self) {
         println!("pc=0x{0:0>2X}", self.pc);
-        println!("RAX=0x{0:X}, RBX=0x{1:X}, RCX=0x{2:X}, RDX=0x{3:X}, RSP=0x{4:X}, RSI=0x{5:X}, RDI=0x{6:X}",
+        println!("RAX=0x{0:X}, RBX=0x{1:X}, RCX=0x{2:X}, RDX=0x{3:X}, RSP=0x{4:X}, RBP=0x{5:X}, RSI=0x{6:X}, RDI=0x{7:X}",
             self.get_register(Y8R::RAX),
             self.get_register(Y8R::RBX),
             self.get_register(Y8R::RCX),
             self.get_register(Y8R::RDX),
             self.get_register(Y8R::RSP),
+            self.get_register(Y8R::RBP),
             self.get_register(Y8R::RSI),
             self.get_register(Y8R::RDI),
         );
@@ -324,8 +364,8 @@ impl SeqProcessor {
     }
     pub fn cycle(&mut self) {
         let fetched = self.fetch();
-        if self.verbose >= 2 {
-            println!("{:?}", fetched);
+        if self.verbose >= 1 {
+            println!("fetched:\n{}", fetched);
         }
         let decoded = self.decode(&fetched);
         if self.verbose >= 2 {
@@ -342,6 +382,11 @@ impl SeqProcessor {
         self.write(&fetched, &decoded, &executed, &memoried);
         if self.verbose >= 1 {
             self.print_registers();
+            if let Some((s, e)) = self.watch_memory_range {
+                let x = &self.memory[s..e];
+                print_bytes(&Vec::from(x));
+            }
+            println!("");
         }
         if self.verbose > 2 {
             for j in 0..10 {
@@ -369,7 +414,7 @@ impl SeqProcessor {
     }
 }
 
-pub fn make_machine(verbose: i64) -> SeqProcessor {
+pub fn make_machine(verbose: i64, watch_memory_range: Option<(usize, usize)>) -> SeqProcessor {
     let machine = SeqProcessor {
         regs: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         pc: 0,
@@ -379,6 +424,7 @@ pub fn make_machine(verbose: i64) -> SeqProcessor {
         memory: [0; 1024],
         stat: Y8S::AOK,
         verbose,
+        watch_memory_range,
     };
     return machine;
 }
@@ -397,7 +443,7 @@ mod tests {
 
   #[test]
   fn seq_processor_test() {
-      let mut machine = make_machine(0);
+      let mut machine = make_machine(0, None);
       let insts: [u8; 4*10 + 2*9 + 3*2 + 2*1] = [
           // 0x00: IRMOVQ $9  $rdx
           0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0,

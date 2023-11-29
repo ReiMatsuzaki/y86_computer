@@ -1,14 +1,14 @@
 main:                        // calculation of x+(y-z)
-  irmovq $100,   %rsp        // init stack pointer
+  irmovq $400,   %rsp        // init stack pointer
   irmovq $24,    %rbx
   subq   %rbx,   %rsp       // allocate for three number
   rrmovq %rsp,   %rbp        // point variable stack top
   irmovq $21,    %rbx
   rmmovq %rbx, 0(%rsp)       // x:=21
-  irmovq $3,     %rbx
-  rmmovq %rbx, 8(%rsp)       // y:=3
   irmovq $7,     %rbx
-  rmmovq %rbx,16(%rsp)       // z:=7
+  rmmovq %rbx, 8(%rsp)       // y:=7
+  irmovq $3,     %rbx
+  rmmovq %rbx,16(%rsp)       // z:=3
 
   mrmovq  0(%rbp), %rbx
   pushq   %rbx             // push x
