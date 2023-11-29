@@ -5,16 +5,11 @@ use std::{env, fs, io};
 use csapp::utils::print_bytes;
 mod yas;
 mod ycc;
+mod yis;
 use std::path::Path;
 use std::ffi::OsStr;
 
 fn main() -> io::Result<()> {
-    // let ra: u8 = 0x0A;
-    // let rb: u8 = 0x09;
-    // let rc = (ra << 4) + rb;
-    // println!("{0:x}, {1:x}, {2:x}", ra << 4, rb, rc);
-    // return Ok(());
-
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         return Err(io::Error::new(
@@ -62,7 +57,9 @@ fn main() -> io::Result<()> {
         println!("\nbytes:");
         print_bytes(&bytes);
     } else if command == "run" {
-        panic!("not implemented");
+        let mut machine = yis::make_machine(1);
+        machine.load(0, &bytes);
+        machine.start();
     } else {
         panic!("unexpected command")
     }
