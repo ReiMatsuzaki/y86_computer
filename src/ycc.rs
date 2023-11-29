@@ -1,6 +1,6 @@
 /*  simple c compiler for Y86-64 */
 
-use crate::yas::{Statement, Value, Register};
+use crate::yas::{Statement, Imm, Register};
 
 #[derive(Debug, PartialEq)]
 enum Token {
@@ -131,8 +131,8 @@ fn code(ast: &Ast) -> Vec<Statement> {
     match ast {
         Ast::Op(a, o, b) => {
             let mut stmts = Vec::new();
-            stmts.push(Statement::Irmovq(Value::Integer(*a), Register::RAX));
-            stmts.push(Statement::Irmovq(Value::Integer(*b), Register::RBX));
+            stmts.push(Statement::Irmovq(Imm::Integer(*a), Register::RAX));
+            stmts.push(Statement::Irmovq(Imm::Integer(*b), Register::RBX));
             match o {
                 Op::Add => stmts.push(Statement::Addq(Register::RBX, Register::RAX)),
                 Op::Sub => stmts.push(Statement::Subq(Register::RBX, Register::RAX)),
