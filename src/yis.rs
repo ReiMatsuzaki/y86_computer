@@ -49,6 +49,8 @@ pub enum OpqFn {
     SUB,
     AND,
     OR,
+    MUL,
+    DIV,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -84,10 +86,15 @@ fn decode_codefn(x: u8) -> Option<CodeFn> {
         0x30 => Some(CodeFn::IRMOVQ),
         0x40 => Some(CodeFn::RMMOVQ),
         0x50 => Some(CodeFn::MRMOVQ),
+
         0x60 => Some(CodeFn::OPQ(OpqFn::ADD)),
         0x61 => Some(CodeFn::OPQ(OpqFn::SUB)),
         0x62 => Some(CodeFn::OPQ(OpqFn::AND)),
         0x63 => Some(CodeFn::OPQ(OpqFn::OR)),
+        0x64 => Some(CodeFn::OPQ(OpqFn::MUL)),
+        0x65 => Some(CodeFn::OPQ(OpqFn::DIV)),
+
+
         0x73 => Some(CodeFn::JXX(JxxFn::JE)),
         0x74 => Some(CodeFn::JXX(JxxFn::JNE)),
         0x80 => Some(CodeFn::CALL),
@@ -269,6 +276,8 @@ impl SeqProcessor {
                 OpqFn::SUB => !(va + !vb), // b-a
                 OpqFn::AND => va & vb,
                 OpqFn::OR => va | vb,
+                OpqFn::MUL => va * vb,
+                OpqFn::DIV => vb / va,
             },
             CodeFn::JXX(_) => 0,
             CodeFn::CALL => vb - 8, // R[%rsp] - 8
@@ -479,4 +488,30 @@ mod tests {
       assert_eq!(0x40, machine.memory[0x78]);
       assert_eq!(0x09, machine.get_register(Y8R::RAX));
   }  
+
+  #[test]
+  fn opq_test() {
+    let mut machine = make_machine(0, None);
+    let insts: [u8; 4*10 + 2*2] = [
+        // IRMOVQ $9  $rdx
+        0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0,
+        // IRMOVQ $4 $rbx
+        0x30, 0xF3, 0x04, 0, 0, 0, 0, 0, 0, 0, 
+        // mulq rdx rbx
+        0x64, 0x23, 
+        // -> rdx=0x09, rbx=36=0x24
+
+        // IRMOVQ $4  $rdx
+        0x30, 0xF2, 0x04, 0, 0, 0, 0, 0, 0, 0,
+        // IRMOVQ $9 $rax
+        0x30, 0xF0, 0x09, 0, 0, 0, 0, 0, 0, 0, 
+        // divq rdx rax
+        0x65, 0x20, 
+        // -> rax=0x02
+    ];
+    machine.load(0, &insts);
+    machine.start();
+    assert_eq!(0x24, machine.get_register(Y8R::RBX));
+    assert_eq!(0x02, machine.get_register(Y8R::RAX));
+  }
 }
