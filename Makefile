@@ -12,4 +12,5 @@ yas2: ${BIN} ./y86/arithmetric.ys
 		${BIN} run ./y86/arithmetric.ys --log-level 0 --watch-memory-range 0:400
 
 ycc1: ${BIN} ./y86/plus.yc
-		${BIN} run ./y86/plus.yc
+		echo "test 2+4"
+		${BIN} run ./y86/plus.yc --log-level 0
