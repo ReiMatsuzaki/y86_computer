@@ -72,6 +72,7 @@ pub enum CodeFn {
     MRMOVQ,
     OPQ(OpqFn),
     JXX(JxxFn),
+    CMOVXX(JxxFn),
     CALL,
     RET,
     PUSHQ,
@@ -83,6 +84,8 @@ fn decode_codefn(x: u8) -> Option<CodeFn> {
         0x00 => Some(CodeFn::HALT),
         0x10 => Some(CodeFn::NOP),
         0x20 => Some(CodeFn::RRMOVQ),
+        0x23 => Some(CodeFn::CMOVXX(JxxFn::JE)),
+        0x24 => Some(CodeFn::CMOVXX(JxxFn::JNE)),
         0x30 => Some(CodeFn::IRMOVQ),
         0x40 => Some(CodeFn::RMMOVQ),
         0x50 => Some(CodeFn::MRMOVQ),
@@ -211,6 +214,7 @@ impl SeqProcessor {
             CodeFn::MRMOVQ => (self.pc + 10, self.pc + 2),
             CodeFn::OPQ(_) => (self.pc + 2, self.pc + 2),
             CodeFn::JXX(_) => (self.pc + 9, self.pc + 1),
+            CodeFn::CMOVXX(_) => (self.pc + 2, self.pc + 2),
             CodeFn::CALL => (self.pc + 9, self.pc + 1),
             CodeFn::RET => (self.pc + 1, self.pc + 1),
             CodeFn::PUSHQ => (self.pc + 2, self.pc + 2),
@@ -246,6 +250,8 @@ impl SeqProcessor {
             CodeFn::MRMOVQ => (0xF, src_a),
             CodeFn::OPQ(_) => (src_b, 0xF),
             CodeFn::JXX(_) => (0xF, 0xF),
+            CodeFn::CMOVXX(JxxFn::JE) => (if self.zf==1 {src_b} else {0xF}, 0xF),
+            CodeFn::CMOVXX(JxxFn::JNE) => (if self.zf==1 {0xF} else {src_b}, 0xF),
             CodeFn::CALL => (rsp, 0xF),
             CodeFn::RET => (rsp, 0xF),
             CodeFn::PUSHQ => (rsp, 0xF),
@@ -280,6 +286,7 @@ impl SeqProcessor {
                 OpqFn::DIV => vb / va,
             },
             CodeFn::JXX(_) => 0,
+            CodeFn::CMOVXX(_) => va,
             CodeFn::CALL => vb - 8, // R[%rsp] - 8
             CodeFn::RET => vb + 8,
             CodeFn::PUSHQ => vb - 8, // R[%rsp] - 8
@@ -312,6 +319,7 @@ impl SeqProcessor {
             }
             CodeFn::OPQ(_) => 0,
             CodeFn::JXX(_) => 0,
+            CodeFn::CMOVXX(_) => 0,
             CodeFn::CALL => {
                 let addr = e.val_e as usize;
                 write_words(&mut self.memory, addr, f.val_p as u64);
@@ -545,5 +553,46 @@ mod tests {
     machine.start();
     assert_eq!(0x24, machine.get_register(Y8R::RBX));
     assert_eq!(0x02, machine.get_register(Y8R::RAX));
+  }
+
+  #[test]
+  fn cmov_test() {
+    let insts: [u8; 2*10 + 3*2] = [
+        // IRMOVQ $9 $rax
+        0x30, 0xF0, 0x09, 0, 0, 0, 0, 0, 0, 0,
+        // IRMOVQ $4 $rbx
+        0x30, 0xF3, 0x04, 0, 0, 0, 0, 0, 0, 0, 
+        // subq rax rbx
+        0x61, 0x03, 
+        // -> non-zero
+        // cmove rax rcx
+        0x23, 0x01,
+        // cmovne rax rdx
+        0x24, 0x02
+    ];
+    let mut machine = make_machine(0, None);
+    machine.load(0, &insts);
+    machine.start();
+    assert_eq!(0, machine.get_register(Y8R::RCX));
+    assert_eq!(9, machine.get_register(Y8R::RDX));
+
+    let insts: [u8; 2*10 + 3*2] = [
+        // IRMOVQ $9 $rax
+        0x30, 0xF0, 0x09, 0, 0, 0, 0, 0, 0, 0,
+        // IRMOVQ $9 $rbx
+        0x30, 0xF3, 0x09, 0, 0, 0, 0, 0, 0, 0, 
+        // subq rax rbx
+        0x61, 0x03, 
+        // -> zero
+        // cmove rax rcx
+        0x23, 0x01,
+        // cmovne rax rdx
+        0x24, 0x02
+    ];
+    let mut machine = make_machine(0, None);
+    machine.load(0, &insts);
+    machine.start();
+    assert_eq!(9, machine.get_register(Y8R::RCX));
+    assert_eq!(0, machine.get_register(Y8R::RDX));
   }
 }
