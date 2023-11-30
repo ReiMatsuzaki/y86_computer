@@ -152,6 +152,8 @@ pub enum Statement {
     Je(Dest),
     Jne(Dest),
     Call(Dest),
+    Cmove(Register, Register),
+    Cmovne(Register, Register),
     Ret,
     Pushq(Register),
     Popq(Register),
@@ -203,6 +205,8 @@ fn parse_instrument(input: &str) -> Result<Statement, String> {
         ["divq", ra, rb] => Ok(Statement::Divq(ra.parse()?, rb.parse()?)),
         ["je", m] => Ok(Statement::Je(m.parse()?)),
         ["jne", m] => Ok(Statement::Jne(m.parse()?)),
+        ["cmove", ra, rb] => Ok(Statement::Cmove(ra.parse()?, rb.parse()?)),
+        ["cmovne", ra, rb] => Ok(Statement::Cmovne(ra.parse()?, rb.parse()?)),
         ["call", m] => Ok(Statement::Call(m.parse()?)),
         ["ret"] => Ok(Statement::Ret),
         ["pushq", ra] => Ok(Statement::Pushq(ra.parse()?)),
@@ -241,6 +245,10 @@ fn byte_length(statement: &Statement) -> u64 {
 
         Statement::Je(_) => 9,
         Statement::Jne(_) => 9,
+
+        Statement::Cmove(_, _) => 2,
+        Statement::Cmovne(_, _) => 2,
+
         Statement::Call(_) => 9,
         Statement::Ret => 1,
         Statement::Pushq(_) => 2,
@@ -357,6 +365,10 @@ fn assemble_one(
 
         Statement::Je(d) => f_v(0x73, d, symbol_table),
         Statement::Jne(d) => f_v(0x74, d, symbol_table),
+
+        Statement::Cmove(ra, rb) => Result::Ok(vec![0x23, ass_reg(Some(ra), Some(rb))]),
+        Statement::Cmovne(ra, rb) => Result::Ok(vec![0x24, ass_reg(Some(ra), Some(rb))]),        
+
         Statement::Call(d) => f_v(0x80, d, symbol_table),
         Statement::Ret => Result::Ok(vec![0x90]),
         Statement::Pushq(ra) => Result::Ok(vec![0xA0, ass_reg(Some(ra), None)]),
@@ -472,10 +484,7 @@ mod tests {
             parse_statement("irmovq $100, %rax"),
             Ok(Statement::Irmovq(Imm::Integer(100), Register::RAX))
         );
-    }
 
-    #[test]
-    fn test_parse_mrmovq() {
         assert_eq!(
             parse_statement("mrmovq  10(%rbx), %rax "),
             Ok(Statement::Mrmovq(
@@ -486,10 +495,7 @@ mod tests {
                 Register::RAX,
             ))
         );
-    }
 
-    #[test]
-    fn test_parse_rmmovq() {
         assert_eq!(
             parse_statement("rmmovq    %rax , 12(%rbx)  "),
             Ok(Statement::Rmmovq(
@@ -499,6 +505,20 @@ mod tests {
                     register: Register::RBX
                 },
             ))
+        );
+
+        assert_eq!(
+            parse_statement("cmove    %rax , %rbx  "),
+            Ok(Statement::Cmove(
+                Register::RAX,
+                Register::RBX))
+        );
+
+        assert_eq!(
+            parse_statement("cmovne    %rax , %rbx  "),
+            Ok(Statement::Cmovne(
+                Register::RAX,
+                Register::RBX))
         );
     }
 

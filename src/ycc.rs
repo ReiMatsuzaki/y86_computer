@@ -356,15 +356,16 @@ mod coder {
         match rel {
             Rel::Add(add) => code_add(add),
             Rel::Eq(rel, add) => {
-                // FIXME
                 let mut stmts = code_rel(rel);
                 stmts.append(&mut code_add(add));
-                stmts.push(Statement::Popq(Register::RBX));
-                stmts.push(Statement::Popq(Register::RAX));
-                // stmts.push(Statement::Cmpq(Register::RBX, Register::RAX));
                 stmts.push(Statement::Irmovq(Imm::Integer(0), Register::RAX));
-                stmts.push(Statement::Irmovq(Imm::Integer(1), Register::RBX));
-                // stmts.push(Statement::Cmovneq(Register::RBX, Register::RAX));
+                stmts.push(Statement::Irmovq(Imm::Integer(1), Register::RDI));
+
+                stmts.push(Statement::Popq(Register::RCX));
+                stmts.push(Statement::Popq(Register::RBX));
+                stmts.push(Statement::Subq(Register::RBX, Register::RCX));
+                stmts.push(Statement::Cmove(Register::RDI, Register::RAX));
+
                 stmts.push(Statement::Pushq(Register::RAX));
                 stmts
             }
