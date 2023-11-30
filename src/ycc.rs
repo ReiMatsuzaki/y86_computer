@@ -69,7 +69,8 @@ pub mod parser {
     use super::tokenizer::Token;
     // BNF
     // expr    = mul ("+" mul | "-" mul)*
-    // mul     = primary ("*" primary | "/" primary)*
+    // mul     = unary ("*" unary | "/" unary)*
+    // unary   =  primary | "+" primary | "-" primary
     // primary = num | "(" expr ")"
 
     // context free grammer:
@@ -83,9 +84,16 @@ pub mod parser {
 
     #[derive(Debug, PartialEq)]
     pub enum Mul {
+        Unary(Box<Unary>),
+        Mul(Box<Unary>, Box<Mul>),
+        Div(Box<Unary>, Box<Mul>),
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub enum Unary {
         Primary(Box<Primary>),
-        Mul(Box<Primary>, Box<Mul>),
-        Div(Box<Primary>, Box<Mul>),
+        Pos(Box<Primary>),
+        Neg(Box<Primary>),
     }
 
     #[derive(Debug, PartialEq)]
@@ -124,17 +132,31 @@ pub mod parser {
         }
 
         fn parse_mul(&mut self) -> Mul {
-            let primary = self.parse_primary();
+            let unary = self.parse_unary();
             match self.tokens.get(self.pos) {
                 Some(Token::Op('*')) => {
                     self.pos += 1;
-                    Mul::Mul(Box::new(primary), Box::new(self.parse_mul()))
+                    Mul::Mul(Box::new(unary), Box::new(self.parse_mul()))
                 }
                 Some(Token::Op('/')) => {
                     self.pos += 1;
-                    Mul::Div(Box::new(primary), Box::new(self.parse_mul()))
+                    Mul::Div(Box::new(unary), Box::new(self.parse_mul()))
                 }
-                _ => Mul::Primary(Box::new(primary)),
+                _ => Mul::Unary(Box::new(unary)),
+            }
+        }
+
+        fn parse_unary(&mut self) -> Unary {
+            match self.tokens.get(self.pos) {
+                Some(Token::Op('+')) => {
+                    self.pos += 1;
+                    Unary::Pos(Box::new(self.parse_primary()))
+                }
+                Some(Token::Op('-')) => {
+                    self.pos += 1;
+                    Unary::Neg(Box::new(self.parse_primary()))
+                }
+                _ => Unary::Primary(Box::new(self.parse_primary())),
             }
         }
 
@@ -164,13 +186,55 @@ pub mod parser {
     mod tests {
         use super::*;
 
+        fn num(n: u64) -> Box<Primary> {
+            Box::new(Primary::Num(n))
+        }
+        
+        fn unary1(primary: Box<Primary>) -> Box<Unary> {
+            Box::new(Unary::Primary(primary))
+        }
+
+        fn pos(primary: Box<Primary>) -> Box<Unary> {
+            Box::new(Unary::Pos(primary))
+        }
+
+        fn neg(primary: Box<Primary>) -> Box<Unary> {
+            Box::new(Unary::Neg(primary))
+        }
+        
+        fn mul1(unary: Box<Unary>) -> Box<Mul> {
+            Box::new(Mul::Unary(unary))
+        }
+        
+        fn mul(left: Box<Unary>, right: Box<Mul>) -> Box<Mul> {
+            Box::new(Mul::Mul(left, right))
+        }
+        
+        fn div(left: Box<Unary>, right: Box<Mul>) -> Box<Mul> {
+            Box::new(Mul::Div(left, right))
+        }
+        
+        fn expr1(mul: Box<Mul>) -> Box<Expr> {
+            Box::new(Expr::Mul(mul))
+        }
+
+        fn add(left: Box<Mul>, right: Box<Expr>) -> Box<Expr> {
+            Box::new(Expr::Add(left, right))
+        }
+        
+        fn sub(left: Box<Mul>, right: Box<Expr>) -> Box<Expr> {
+            Box::new(Expr::Sub(left, right))
+        }
+        
         #[test]
         fn test_expr() {
             let tokens = vec![
+                Token::Op('+'),
                 Token::Num(1),
                 Token::Op('+'),
                 Token::Num(2),
                 Token::Op('*'),
+                Token::Op('-'),
                 Token::Num(3),
                 Token::Op('-'),
                 Token::Num(4),
@@ -178,21 +242,15 @@ pub mod parser {
                 Token::Num(5),
             ];
             let mut parser = Parser { tokens, pos: 0 };
-            let expe = Expr::Add(
-                Box::new(Mul::Primary(Box::new(Primary::Num(1)))),
-                Box::new(Expr::Sub(
-                    Box::new(Mul::Mul(
-                        Box::new(Primary::Num(2)),
-                        Box::new(Mul::Primary(Box::new(Primary::Num(3)))),
-                    )),
-                    Box::new(Expr::Mul(Box::new(Mul::Div(
-                        Box::new(Primary::Num(4)),
-                        Box::new(Mul::Primary(Box::new(Primary::Num(5)))),
-                    )))),
-                )),
-            );
+            let expe = add(
+                mul1(pos(num(1))), 
+                sub(mul(
+                    unary1(num(2)), 
+                    mul1(neg(num(3)))),
+                  expr1(div(unary1(num(4)), 
+                            mul1(unary1(num(5)))))));
             let calc = parser.parse_expr();
-            assert_eq!(expe, calc);
+            assert_eq!(expe, calc.into());
         }
     }
 }
@@ -237,9 +295,9 @@ mod coder {
 
     fn code_mul(mul: &Mul) -> Vec<Statement> {
         match mul {
-            Mul::Primary(primary) => code_primary(primary),
-            Mul::Mul(primary, mul) => {
-                let mut stmts = code_primary(primary);
+            Mul::Unary(unary) => code_unary(unary),
+            Mul::Mul(unary, mul) => {
+                let mut stmts = code_unary(unary);
                 stmts.append(&mut code_mul(mul));
                 stmts.push(Statement::Popq(Register::RBX));
                 stmts.push(Statement::Popq(Register::RAX));
@@ -247,12 +305,31 @@ mod coder {
                 stmts.push(Statement::Pushq(Register::RAX));
                 stmts
             }
-            Mul::Div(primary, mul) => {
-                let mut stmts = code_primary(primary);
+            Mul::Div(unary, mul) => {
+                let mut stmts = code_unary(unary);
                 stmts.append(&mut code_mul(mul));
                 stmts.push(Statement::Popq(Register::RBX));
                 stmts.push(Statement::Popq(Register::RAX));
                 stmts.push(Statement::Divq(Register::RBX, Register::RAX));
+                stmts.push(Statement::Pushq(Register::RAX));
+                stmts
+            }
+        }
+    }
+
+    fn code_unary(unary: &Unary) -> Vec<Statement> {
+        match unary {
+            Unary::Primary(primary) => code_primary(primary),
+            Unary::Pos(primary) => code_primary(primary),
+            Unary::Neg(primary) => {
+                // transform -x to 0 - x
+                let mut stmts = Vec::new();
+                stmts.push(Statement::Irmovq(Imm::Integer(0), Register::RAX));
+                stmts.push(Statement::Pushq(Register::RAX));
+                stmts.append(&mut code_primary(primary));
+                stmts.push(Statement::Popq(Register::RBX));
+                stmts.push(Statement::Popq(Register::RAX));
+                stmts.push(Statement::Subq(Register::RBX, Register::RAX));
                 stmts.push(Statement::Pushq(Register::RAX));
                 stmts
             }
@@ -276,8 +353,8 @@ mod coder {
         #[test]
         fn test_code() {
             let expr = Expr::Add(
-                Box::new(Mul::Primary(Box::new(Primary::Num(1)))),
-                Box::new(Expr::Mul(Box::new(Mul::Primary(Box::new(Primary::Num(2)))))),
+                Box::new(Mul::Unary(Box::new(Unary::Primary(Box::new(Primary::Num(1)))))),
+                Box::new(Expr::Mul(Box::new(Mul::Unary(Box::new(Unary::Primary(Box::new(Primary::Num(2)))))))),
             );
             let expe = vec![
                 Statement::Irmovq(Imm::Integer(INIT_SP), Register::RSP),
@@ -300,6 +377,7 @@ pub fn compile(src: &str) -> Vec<Statement> {
     let tokens = tokenizer::tokenize(src);
     let mut parser = parser::Parser::new(tokens);
     let expr = parser.parse();
+    println!("{:?}", expr);
     coder::code(&expr)
 }
 

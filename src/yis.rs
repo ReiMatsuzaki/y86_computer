@@ -272,8 +272,8 @@ impl SeqProcessor {
             CodeFn::RMMOVQ => vb + vc,
             CodeFn::MRMOVQ => vb + vc,
             CodeFn::OPQ(f) => match f {
-                OpqFn::ADD => va + vb,
-                OpqFn::SUB => !(va + !vb), // b-a
+                OpqFn::ADD => va.wrapping_add(vb),
+                OpqFn::SUB => vb.wrapping_sub(va),
                 OpqFn::AND => va & vb,
                 OpqFn::OR => va | vb,
                 OpqFn::MUL => va * vb,
@@ -491,7 +491,38 @@ mod tests {
 
   #[test]
   fn opq_test() {
+    let insts: [u8; 2*10 + 2] = [
+        // IRMOVQ $9  $rdx
+        0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0,
+        // IRMOVQ $4 $rbx
+        0x30, 0xF3, 0x04, 0, 0, 0, 0, 0, 0, 0, 
+        // subq rdx rbx
+        0x61, 0x23, 
+        // -> rdx=0x09, rbx=-5
+    ];
     let mut machine = make_machine(0, None);
+    machine.load(0, &insts);
+    machine.start();
+    let neg: u64 = 5;
+    assert_eq!(0, neg.wrapping_add(machine.get_register(Y8R::RBX)));
+
+    let insts: [u8; 2*10 + 2*2] = [
+        // IRMOVQ $9 $rdx
+        0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0,
+        // IRMOVQ $4 $rbx
+        0x30, 0xF3, 0x04, 0, 0, 0, 0, 0, 0, 0, 
+        // subq rdx rbx
+        0x61, 0x23, 
+        // -> rdx=0x09, rbx=4-9=-5
+        // addq rdx rbx
+        0x60, 0x23
+        // -> rbx=4
+    ];
+    let mut machine = make_machine(0, None);
+    machine.load(0, &insts);
+    machine.start();
+    assert_eq!(0x04, machine.get_register(Y8R::RBX));
+
     let insts: [u8; 4*10 + 2*2] = [
         // IRMOVQ $9  $rdx
         0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0,
@@ -509,6 +540,7 @@ mod tests {
         0x65, 0x20, 
         // -> rax=0x02
     ];
+    let mut machine = make_machine(0, None);
     machine.load(0, &insts);
     machine.start();
     assert_eq!(0x24, machine.get_register(Y8R::RBX));
