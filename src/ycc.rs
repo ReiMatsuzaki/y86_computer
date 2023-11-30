@@ -5,6 +5,7 @@ pub mod tokenizer {
     #[derive(Debug, PartialEq)]
     pub enum Token {
         Op(char),
+        Op2([char; 2]),
         Num(u64),
         Id(String),
     }
@@ -15,7 +16,13 @@ pub mod tokenizer {
         while let Some(c) = chars.next() {
             match c {
                 ' ' | '\t' | '\n' => continue,
-                '+' | '-' | '*' | '/' | '(' | ')' => {
+                '=' => {
+                    if let Some('=') = chars.peek() {
+                                tokens.push(Token::Op2(['=', '=']));
+                                chars.next();
+                    }
+                }
+                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' => {
                     tokens.push(Token::Op(c));
                 }
                 '0'..='9' => {
@@ -59,6 +66,17 @@ pub mod tokenizer {
         fn test_tokenize() {
             let input = "13 + 2";
             let expe = vec![Token::Num(13), Token::Op('+'), Token::Num(2)];
+            let calc = tokenize(input);
+            assert_eq!(expe, calc);
+
+            let input = "13 + 2==3";
+            let expe = vec![
+                Token::Num(13), 
+                Token::Op('+'), 
+                Token::Num(2),
+                Token::Op2(['=', '=']),
+                Token::Num(3)
+                ];
             let calc = tokenize(input);
             assert_eq!(expe, calc);
         }
