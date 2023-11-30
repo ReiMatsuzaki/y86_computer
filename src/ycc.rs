@@ -241,20 +241,18 @@ mod coder {
             Mul::Mul(primary, mul) => {
                 let mut stmts = code_primary(primary);
                 stmts.append(&mut code_mul(mul));
-                // FIXME
                 stmts.push(Statement::Popq(Register::RBX));
                 stmts.push(Statement::Popq(Register::RAX));
-                stmts.push(Statement::Subq(Register::RBX, Register::RAX));
+                stmts.push(Statement::Mulq(Register::RBX, Register::RAX));
                 stmts.push(Statement::Pushq(Register::RAX));
                 stmts
             }
             Mul::Div(primary, mul) => {
                 let mut stmts = code_primary(primary);
                 stmts.append(&mut code_mul(mul));
-                // FIXME
                 stmts.push(Statement::Popq(Register::RBX));
                 stmts.push(Statement::Popq(Register::RAX));
-                stmts.push(Statement::Subq(Register::RBX, Register::RAX));
+                stmts.push(Statement::Divq(Register::RBX, Register::RAX));
                 stmts.push(Statement::Pushq(Register::RAX));
                 stmts
             }

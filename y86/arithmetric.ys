@@ -1,4 +1,4 @@
-main:                        // calculation of x+(y-z)
+main:                        // calculation of x*(y-z)
   irmovq $400,   %rsp        // init stack pointer
   irmovq $24,    %rbx
   subq   %rbx,   %rsp       // allocate for three number
@@ -24,6 +24,6 @@ main:                        // calculation of x+(y-z)
 
   popq %rax        //y-z
   popq %rbx        //x
-  addq %rbx,%rax
+  mulq %rbx,%rax
   irmovq $24, %rbx
   addq %rbx, %rsp

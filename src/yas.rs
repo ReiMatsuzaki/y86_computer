@@ -147,6 +147,8 @@ pub enum Statement {
     Subq(Register, Register),
     Andq(Register, Register),
     Orq(Register, Register),
+    Mulq(Register, Register),
+    Divq(Register, Register),    
     Je(Dest),
     Jne(Dest),
     Call(Dest),
@@ -197,6 +199,8 @@ fn parse_instrument(input: &str) -> Result<Statement, String> {
         ["subq", ra, rb] => Ok(Statement::Subq(ra.parse()?, rb.parse()?)),
         ["andq", ra, rb] => Ok(Statement::Andq(ra.parse()?, rb.parse()?)),
         ["orq", ra, rb] => Ok(Statement::Orq(ra.parse()?, rb.parse()?)),
+        ["mulq", ra, rb] => Ok(Statement::Mulq(ra.parse()?, rb.parse()?)),
+        ["divq", ra, rb] => Ok(Statement::Divq(ra.parse()?, rb.parse()?)),
         ["je", m] => Ok(Statement::Je(m.parse()?)),
         ["jne", m] => Ok(Statement::Jne(m.parse()?)),
         ["call", m] => Ok(Statement::Call(m.parse()?)),
@@ -222,14 +226,19 @@ fn byte_length(statement: &Statement) -> u64 {
         Statement::Label(_) => 0,
         Statement::Halt => 1,
         Statement::Nop => 1,
+
         Statement::Rrmovq(_, _) => 2,
         Statement::Irmovq(_, _) => 10,
         Statement::Rmmovq(_, _) => 10,
         Statement::Mrmovq(_, _) => 10,
+
         Statement::Addq(_, _) => 2,
         Statement::Subq(_, _) => 2,
         Statement::Andq(_, _) => 2,
         Statement::Orq(_, _) => 2,
+        Statement::Mulq(_, _) => 2,
+        Statement::Divq(_, _) => 2,        
+
         Statement::Je(_) => 9,
         Statement::Jne(_) => 9,
         Statement::Call(_) => 9,
@@ -315,6 +324,7 @@ fn assemble_one(
         Statement::Label(_) => Result::Ok(Vec::new()),
         Statement::Halt => Result::Ok(vec![0x00]),
         Statement::Nop => Result::Ok(vec![0x10]),
+
         Statement::Rrmovq(ra, rb) => Result::Ok(vec![0x20, ass_reg(Some(ra), Some(rb))]),
         Statement::Irmovq(v, rb) => {
             let r = ass_reg(None, Some(rb));
@@ -337,10 +347,14 @@ fn assemble_one(
                 0x50, r, xs[0], xs[1], xs[2], xs[3], xs[4], xs[5], xs[6], xs[7],
             ])
         }
+
         Statement::Addq(ra, rb) => Result::Ok(vec![0x60, ass_reg(Some(ra), Some(rb))]),
         Statement::Subq(ra, rb) => Result::Ok(vec![0x61, ass_reg(Some(ra), Some(rb))]),
         Statement::Andq(ra, rb) => Result::Ok(vec![0x62, ass_reg(Some(ra), Some(rb))]),
         Statement::Orq(ra, rb) => Result::Ok(vec![0x63, ass_reg(Some(ra), Some(rb))]),
+        Statement::Mulq(ra, rb) => Result::Ok(vec![0x64, ass_reg(Some(ra), Some(rb))]),
+        Statement::Divq(ra, rb) => Result::Ok(vec![0x65, ass_reg(Some(ra), Some(rb))]),
+
         Statement::Je(d) => f_v(0x73, d, symbol_table),
         Statement::Jne(d) => f_v(0x74, d, symbol_table),
         Statement::Call(d) => f_v(0x80, d, symbol_table),
@@ -489,39 +503,40 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_addq() {
+    fn test_parse_opq() {
         assert_eq!(
             parse_statement("  addq    %rsi,  %rdi  "),
             Ok(Statement::Addq(Register::RSI, Register::RDI)),
         );
-    }
 
-    #[test]
-    fn test_parse_subq() {
         assert_eq!(
             parse_statement("subq    %rbp , %r8  "),
             Ok(Statement::Subq(Register::RBP, Register::R8)),
         );
-    }
-
-    #[test]
-    fn test_parse_andq() {
+    
         assert_eq!(
             parse_statement("andq    %r9,  %r10  "),
             Ok(Statement::Andq(Register::R9, Register::R10)),
         );
-    }
 
-    #[test]
-    fn test_parse_orq() {
         assert_eq!(
             parse_statement("orq    %rax  ,%r11 "),
             Ok(Statement::Orq(Register::RAX, Register::R11)),
         );
+
+        assert_eq!(
+            parse_statement("  mulq  %r9,  %r10  "),
+            Ok(Statement::Mulq(Register::R9, Register::R10)),
+        );
+
+        assert_eq!(
+            parse_statement(" divq  %rax  ,%r11 "),
+            Ok(Statement::Divq(Register::RAX, Register::R11)),
+        );
     }
 
     #[test]
-    fn test_parse_je() {
+    fn test_parse_jxx() {
         assert_eq!(
             parse_statement("je    100  "),
             Ok(Statement::Je(Dest::Integer(100))),
@@ -530,10 +545,7 @@ mod tests {
             parse_statement("je    done  "),
             Ok(Statement::Je(Dest::Label(String::from("done")))),
         );
-    }
 
-    #[test]
-    fn test_parse_jne() {
         assert_eq!(
             parse_statement("jne    100  "),
             Ok(Statement::Jne(Dest::Integer(100))),
