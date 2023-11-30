@@ -17,5 +17,5 @@ ycc1: ${BIN} ./y86/plus.yc
 		${BIN} run ./y86/plus.yc --log-level 0
 
 ycc2: ${BIN} ./y86/arithmetric.yc
-		@echo "test (  2  + 4 ) * 6 - (9 / 2 - 2*3) - 5 "
+		@echo "test (  2  + 4 ) * 6 - (9 / 2 - 2*3) - 5 = 33 = 0x21"
 		${BIN} run ./y86/arithmetric.yc --log-level 0
