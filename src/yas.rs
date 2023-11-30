@@ -94,8 +94,8 @@ impl FromStr for Dest {
 
 #[derive(Debug, PartialEq)]
 pub struct ModDest {
-    dest: Dest,
-    register: Register,
+    pub(crate) dest: Dest,
+    pub(crate) register: Register,
 }
 
 impl FromStr for ModDest {

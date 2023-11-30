@@ -18,11 +18,11 @@ pub mod tokenizer {
                 ' ' | '\t' | '\n' => continue,
                 '=' => {
                     if let Some('=') = chars.peek() {
-                                tokens.push(Token::Op2(['=', '=']));
-                                chars.next();
+                        tokens.push(Token::Op2(['=', '=']));
+                        chars.next();
                     }
                 }
-                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' => {
+                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | ';' => {
                     tokens.push(Token::Op(c));
                 }
                 '0'..='9' => {
@@ -57,11 +57,11 @@ pub mod tokenizer {
         }
         tokens
     }
-    
+
     #[cfg(test)]
     mod tests {
         use super::*;
-    
+
         #[test]
         fn test_tokenize() {
             let input = "13 + 2";
@@ -71,16 +71,16 @@ pub mod tokenizer {
 
             let input = "13 + 2==3";
             let expe = vec![
-                Token::Num(13), 
-                Token::Op('+'), 
+                Token::Num(13),
+                Token::Op('+'),
                 Token::Num(2),
                 Token::Op2(['=', '=']),
-                Token::Num(3)
-                ];
+                Token::Num(3),
+            ];
             let calc = tokenize(input);
             assert_eq!(expe, calc);
         }
-    }    
+    }
 }
 
 pub mod parser {
@@ -91,12 +91,26 @@ pub mod parser {
     // unary   =  primary | "+" primary | "-" primary
     // primary = num | "(" expr ")"
 
-    // context free grammer:
-    // expr ::= mul | mul "+" expr | mul "-" expr
+    #[derive(Debug, PartialEq)]
+    pub enum Prog {
+        Stmt(Box<Stmt>),
+        Mult(Box<Stmt>, Box<Prog>),
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub enum Stmt {
+        Expr(Box<Expr>),
+    }
 
     #[derive(Debug, PartialEq)]
     pub enum Expr {
+        Assign(Box<Assign>),
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub enum Assign {
         Rel(Box<Rel>),
+        Assign(Box<Rel>, Box<Rel>),
     }
 
     #[derive(Debug, PartialEq)]
@@ -129,7 +143,14 @@ pub mod parser {
     #[derive(Debug, PartialEq)]
     pub enum Primary {
         Num(u64),
+        Var(Var),
         Expr(Box<Expr>),
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub struct Var {
+        pub name: String,
+        pub offset: u64,
     }
 
     pub struct Parser {
@@ -142,13 +163,40 @@ pub mod parser {
             Parser { tokens, pos: 0 }
         }
 
-        pub fn parse(&mut self) -> Expr {
-            self.parse_expr()
+        pub fn parse(&mut self) -> Prog {
+            self.parse_prog()
+        }
+
+        fn parse_prog(&mut self) -> Prog {
+            let stmt = self.parse_stmt();
+            if let Some(&Token::Op(';')) = self.tokens.get(self.pos) {
+                self.pos += 1;
+                let prog = self.parse_prog();
+                Prog::Mult(Box::new(stmt), Box::new(prog))
+            } else {
+                Prog::Stmt(Box::new(stmt))
+            }
+        }
+
+        fn parse_stmt(&mut self) -> Stmt {
+            let expr = self.parse_expr();
+            Stmt::Expr(Box::new(expr))
         }
 
         fn parse_expr(&mut self) -> Expr {
-            let rel = self.parse_rel();
-            Expr::Rel(Box::new(rel))
+            let assign = self.parse_assign();
+            Expr::Assign(Box::new(assign))
+        }
+
+        fn parse_assign(&mut self) -> Assign {
+            let left = self.parse_rel();
+            if let Some(&Token::Op('=')) = self.tokens.get(self.pos) {
+                self.pos += 1;
+                let right = self.parse_rel();
+                Assign::Assign(Box::new(left), Box::new(right))
+            } else {
+                Assign::Rel(Box::new(left))
+            }
         }
 
         fn parse_rel(&mut self) -> Rel {
@@ -159,7 +207,7 @@ pub mod parser {
                         self.pos += 1;
                         let right = self.parse_add();
                         left = Rel::Eq(Box::new(left), Box::new(right));
-                    },
+                    }
                     _ => break,
                 }
             }
@@ -174,12 +222,12 @@ pub mod parser {
                         self.pos += 1;
                         let right = self.parse_mul();
                         left = Add::Add(Box::new(left), Box::new(right));
-                    },
+                    }
                     Token::Op('-') => {
                         self.pos += 1;
                         let right = self.parse_mul();
                         left = Add::Sub(Box::new(left), Box::new(right));
-                    },
+                    }
                     _ => break,
                 }
             }
@@ -224,6 +272,12 @@ pub mod parser {
                     self.pos += 1;
                     Primary::Num(*n)
                 }
+                Some(Token::Id(id)) => {
+                    self.pos += 1;
+                    // FIXME
+                    let offset= (id.as_bytes()[0] - ('a' as u8)) as u64;
+                    Primary::Var(Var{name: id.to_string(), offset})
+                }
                 Some(Token::Op('(')) => {
                     self.pos += 1;
                     let expr = self.parse_expr();
@@ -243,90 +297,101 @@ pub mod parser {
     #[cfg(test)]
     mod tests {
         use super::*;
-
-        fn num(n: u64) -> Box<Primary> {
+        pub fn num(n: u64) -> Box<Primary> {
             Box::new(Primary::Num(n))
         }
-        
-        fn unary1(primary: Box<Primary>) -> Box<Unary> {
+
+        pub fn unary1(primary: Box<Primary>) -> Box<Unary> {
             Box::new(Unary::Primary(primary))
         }
 
-        fn pos(primary: Box<Primary>) -> Box<Unary> {
+        pub fn pos(primary: Box<Primary>) -> Box<Unary> {
             Box::new(Unary::Pos(primary))
         }
 
-        fn neg(primary: Box<Primary>) -> Box<Unary> {
+        pub fn neg(primary: Box<Primary>) -> Box<Unary> {
             Box::new(Unary::Neg(primary))
         }
-        
-        fn mul1(unary: Box<Unary>) -> Box<Mul> {
+
+        pub fn mul1(unary: Box<Unary>) -> Box<Mul> {
             Box::new(Mul::Unary(unary))
         }
-        
-        fn mul(left: Box<Mul>, right: Box<Unary>) -> Box<Mul> {
+
+        pub fn mul(left: Box<Unary>, right: Box<Unary>) -> Box<Mul> {
+            let left = Box::new(Mul::Unary(left));
             Box::new(Mul::Mul(left, right))
         }
-        
-        fn div(left: Box<Mul>, right: Box<Unary>) -> Box<Mul> {
+
+        pub fn div(left: Box<Unary>, right: Box<Unary>) -> Box<Mul> {
+            let left = Box::new(Mul::Unary(left));
             Box::new(Mul::Div(left, right))
         }
-        
-        fn expr1(rel: Box<Rel>) -> Box<Expr> {
-            Box::new(Expr::Rel(rel))
+
+        pub fn add(left: Box<Mul>, right: Box<Mul>) -> Box<Add> {
+            let l = Box::new(Add::Mul(left));
+            Box::new(Add::Add(l, right))
         }
 
-        fn add(left: Box<Add>, right: Box<Mul>) -> Box<Add> {
-            Box::new(Add::Add(left, right))
-        }
-        
-        fn sub(left: Box<Add>, right: Box<Mul>) -> Box<Add> {
-            Box::new(Add::Sub(left, right))
+        pub fn sub(left: Box<Mul>, right: Box<Mul>) -> Box<Add> {
+            let l = Box::new(Add::Mul(left));
+            Box::new(Add::Sub(l, right))
         }
 
-        fn add1(add: Box<Mul>) -> Box<Add> {
+        pub fn add1(add: Box<Mul>) -> Box<Add> {
             Box::new(Add::Mul(add))
         }
 
-        fn rel1(add: Box<Add>) -> Box<Rel> {
+        pub fn rel1(add: Box<Add>) -> Box<Rel> {
             Box::new(Rel::Add(add))
         }
 
-        // fn eq(left: Box<Rel>, right: Box<Add>) -> Box<Rel> {
-        //     Box::new(Rel::Eq(left, right))
-        // }
+        pub fn eq(left: Box<Add>, right: Box<Add>) -> Box<Rel> {
+            let l = Box::new(Rel::Add(left));
+            Box::new(Rel::Eq(l, right))
+        }
+
+        pub fn assign1(rel: Box<Rel>) -> Box<Assign> {
+            Box::new(Assign::Rel(rel))
+        }
+
+        pub fn assign(left: Box<Rel>, right: Box<Rel>) -> Box<Assign> {
+            Box::new(Assign::Assign(left, right))
+        }
+
+        pub fn expr1(assign: Box<Assign>) -> Box<Expr> {
+            Box::new(Expr::Assign(assign))
+        }
+
+        pub fn stmt1(expr: Box<Expr>) -> Box<Stmt> {
+            Box::new(Stmt::Expr(expr))
+        }
+
+        pub fn prog1(stmt: Box<Stmt>) -> Box<Prog> {
+            Box::new(Prog::Stmt(stmt))
+        }
 
         #[test]
         fn test_expr() {
             let tokens = vec![
                 Token::Op('+'),
                 Token::Num(1),
-
                 Token::Op('+'),
-
                 Token::Num(2),
                 Token::Op('*'),
                 Token::Op('-'),
                 Token::Num(3),
-
                 Token::Op('-'),
-
                 Token::Num(4),
                 Token::Op('/'),
                 Token::Num(5),
             ];
             let mut parser = Parser { tokens, pos: 0 };
             let m_1 = mul1(pos(num(1)));
-            let m_2_3 = mul(
-                mul1(unary1(num(2))),
-                neg(num(3)));
-            let m_4_5 = div(
-                mul1(unary1(num(4))), 
-            unary1(num(5)));
-            let expe = expr1(rel1(sub(
-                add(add1(m_1), m_2_3),
-                    m_4_5)));
-            let calc = parser.parse_expr();
+            let m_2_3 = mul(unary1(num(2)), neg(num(3)));
+            let m_4_5 = div(unary1(num(4)), unary1(num(5)));
+            let expe = Add::Sub(add(m_1, m_2_3), m_4_5);
+            let expe = prog1(stmt1(expr1(assign1(rel1(Box::new(expe))))));
+            let calc = parser.parse_prog();
             assert_eq!(expe, calc.into());
         }
     }
@@ -334,21 +399,87 @@ pub mod parser {
 
 mod coder {
     use super::parser::*;
-    // 512 is magic number
-    const INIT_SP: u64 = 512;
+    const INIT_SP: u64 = 512; // initial stack pointer
+    const NUM_LVAR: u64 = 10; // number of local variable
 
-    use crate::yas::{Imm, Register, Statement};
+    use crate::yas::{Imm, Register, Statement, ModDest};
 
-    pub fn code(expr: &Expr) -> Vec<Statement> {
-        let mut stmts = Vec::new();
-        stmts.push(Statement::Irmovq(Imm::Integer(INIT_SP), Register::RSP));
-        stmts.append(&mut code_expr(expr));
+    pub fn code(prog: &Prog) -> Vec<Statement> {
+        // Artificial initializations
+        let mut stmts = vec![
+            // initialize stack pointer
+            Statement::Irmovq(Imm::Integer(INIT_SP), Register::RSP),
+            Statement::Irmovq(Imm::Integer(INIT_SP + 10), Register::RSP),
+        ];
+
+        // Prologue
+        stmts.append(&mut vec![
+            // save base pointer and set current stack pointer to base pointer
+            Statement::Pushq(Register::RBP),
+            Statement::Rrmovq(Register::RSP, Register::RBP),
+            // allocate local variables
+            Statement::Irmovq(Imm::Integer(NUM_LVAR * 8), Register::RAX),
+            Statement::Subq(Register::RAX, Register::RSP),
+        ]);
+
+        // main code
+        stmts.append(&mut code_prog(prog));
+
+        // Epilogue
+        stmts.append(&mut vec![
+            // deallocate local variables
+            Statement::Rrmovq(Register::RBP, Register::RSP),
+            // restore base pointer
+            Statement::Popq(Register::RBP),
+        ]);
+
         stmts
+    }
+
+    fn code_prog(prog: &Prog) -> Vec<Statement> {
+        match prog {
+            Prog::Stmt(stmt) => code_stmt(stmt),
+            Prog::Mult(stmt, prog) => {
+                let mut stmts = code_stmt(stmt);
+                stmts.append(&mut code_prog(prog));
+                stmts
+            }
+        }
+    }
+
+    fn code_stmt(stmt: &Stmt) -> Vec<Statement> {
+        match stmt {
+            Stmt::Expr(expr) => code_expr(expr),
+        }
     }
 
     fn code_expr(expr: &Expr) -> Vec<Statement> {
         match expr {
-            Expr::Rel(rel) => code_rel(rel),
+            Expr::Assign(assign) => code_assign(assign),
+        }
+    }
+
+    fn code_assign(assign: &Assign) -> Vec<Statement> {
+        // FIXME
+        match assign {
+            Assign::Rel(rel) => code_rel(rel),
+            Assign::Assign(left, right) => {
+                // match left {
+                //     Rel::Add(Box::<Add>(Add::Mul(m))) => panic!("unexpected assign left hand"),
+                //     // Rel::Add(Box<Add>(Add::Mul(Box<Mul>::Unary(Box<Unary>::Primary(Box<Primary>::Var(var))))) => {
+                //     //     let mut stmts = code_lvar(v);
+                //     // },
+                //     _ => panic!("unexpected assign left hand"),
+                // };
+                let mut stmts =  code_rel(left);
+                stmts.append(&mut code_rel(right));
+                stmts.push(Statement::Popq(Register::RBX)); // right hand: value
+                stmts.push(Statement::Popq(Register::RAX)); // left hand : variable address
+                let d = ModDest {dest: crate::yas::Dest::Integer(0), register: Register::RAX};
+                stmts.push(Statement::Rmmovq(Register::RBX, d));
+                stmts.push(Statement::Pushq(Register::RBX));
+                stmts
+            }
         }
     }
 
@@ -375,7 +506,7 @@ mod coder {
     fn code_add(add: &Add) -> Vec<Statement> {
         match add {
             Add::Mul(mul) => code_mul(mul),
-            Add::Add(add, mul,) => {
+            Add::Add(add, mul) => {
                 let mut stmts = code_add(add);
                 stmts.append(&mut code_mul(mul));
                 stmts.push(Statement::Popq(Register::RBX));
@@ -445,19 +576,111 @@ mod coder {
                 Statement::Irmovq(Imm::Integer(*n), Register::RBX),
                 Statement::Pushq(Register::RBX),
             ],
+            Primary::Var(var) => {
+                let mut stmts = code_lvar(var);
+                let d = ModDest {dest: crate::yas::Dest::Integer(0), register: Register::RAX};
+                let mut s = vec![
+                    Statement::Popq(Register::RAX), // pop variable address
+                    Statement::Mrmovq(d, Register::RAX), 
+                    Statement::Pushq(Register::RAX), // push variable value
+                ];
+                stmts.append(&mut s);
+                stmts
+            },
             Primary::Expr(expr) => code_expr(expr),
         }
+    }
+
+    fn code_lvar(var: &Var) -> Vec<Statement> {
+        vec![
+            Statement::Irmovq(Imm::Integer(var.offset), Register::RAX),
+            Statement::Rrmovq(Register::RBP, Register::RBX),
+            Statement::Subq(Register::RAX, Register::RBX), 
+            Statement::Pushq(Register::RBX) //push variable address(=base_pointer - offset)
+        ]
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
 
+        pub fn num(n: u64) -> Box<Primary> {
+            Box::new(Primary::Num(n))
+        }
+
+        pub fn unary1(primary: Box<Primary>) -> Box<Unary> {
+            Box::new(Unary::Primary(primary))
+        }
+
+        pub fn pos(primary: Box<Primary>) -> Box<Unary> {
+            Box::new(Unary::Pos(primary))
+        }
+
+        pub fn neg(primary: Box<Primary>) -> Box<Unary> {
+            Box::new(Unary::Neg(primary))
+        }
+
+        pub fn mul1(unary: Box<Unary>) -> Box<Mul> {
+            Box::new(Mul::Unary(unary))
+        }
+
+        // pub fn mul(left: Box<Unary>, right: Box<Unary>) -> Box<Mul> {
+        //     let left = Box::new(Mul::Unary(left));
+        //     Box::new(Mul::Mul(left, right))
+        // }
+
+        // pub fn div(left: Box<Unary>, right: Box<Unary>) -> Box<Mul> {
+        //     let left = Box::new(Mul::Unary(left));
+        //     Box::new(Mul::Div(left, right))
+        // }
+
+        pub fn add(left: Box<Mul>, right: Box<Mul>) -> Box<Add> {
+            let l = Box::new(Add::Mul(left));
+            Box::new(Add::Add(l, right))
+        }
+
+        // pub fn sub(left: Box<Mul>, right: Box<Mul>) -> Box<Add> {
+        //     let l = Box::new(Add::Mul(left));
+        //     Box::new(Add::Sub(l, right))
+        // }
+
+        // pub fn add1(add: Box<Mul>) -> Box<Add> {
+        //     Box::new(Add::Mul(add))
+        // }
+
+        pub fn rel1(add: Box<Add>) -> Box<Rel> {
+            Box::new(Rel::Add(add))
+        }
+
+        // pub fn eq(left: Box<Add>, right: Box<Add>) -> Box<Rel> {
+        //     let l = Box::new(Rel::Add(left));
+        //     Box::new(Rel::Eq(l, right))
+        // }
+
+        pub fn assign1(rel: Box<Rel>) -> Box<Assign> {
+            Box::new(Assign::Rel(rel))
+        }
+
+        // pub fn assign(left: Box<Rel>, right: Box<Rel>) -> Box<Assign> {
+        //     Box::new(Assign::Assign(left, right))
+        // }
+
+        pub fn expr1(assign: Box<Assign>) -> Box<Expr> {
+            Box::new(Expr::Assign(assign))
+        }
+
+        pub fn stmt1(expr: Box<Expr>) -> Box<Stmt> {
+            Box::new(Stmt::Expr(expr))
+        }
+
+        pub fn prog1(stmt: Box<Stmt>) -> Box<Prog> {
+            Box::new(Prog::Stmt(stmt))
+        }
+
         #[test]
         fn test_code() {
-            let expr = Expr::Rel(Box::new(Rel::Add(Box::new(Add::Add(
-                Box::new(Add::Mul(Box::new(Mul::Unary(Box::new(Unary::Primary(Box::new(Primary::Num(1)))))))),
-                Box::new(Mul::Unary(Box::new(Unary::Primary(Box::new(Primary::Num(2)))))))))));
+            let a = add(mul1(pos(num(1))), mul1(pos(num(2))));
+            let p = prog1(stmt1(expr1(assign1(rel1(a)))));
             let expe = vec![
                 Statement::Irmovq(Imm::Integer(INIT_SP), Register::RSP),
                 Statement::Irmovq(Imm::Integer(1), Register::RBX),
@@ -469,7 +692,7 @@ mod coder {
                 Statement::Addq(Register::RBX, Register::RAX),
                 Statement::Pushq(Register::RAX),
             ];
-            let calc = code(&expr);
+            let calc = code(&p);
             assert_eq!(expe, calc);
         }
     }
@@ -482,5 +705,3 @@ pub fn compile(src: &str) -> Vec<Statement> {
     // println!("{:?}", expr);
     coder::code(&expr)
 }
-
-
