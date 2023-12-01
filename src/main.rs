@@ -55,7 +55,8 @@ fn main() -> io::Result<()> {
     let statements = match extension {
         Some("yc") => {
             println!("ycc start");
-            let statements = ycc::compile(&contents);
+            // let statements_old = ycc::compile(&contents);
+            let statements = ycc::scompile(&contents);
             statements
         }
         Some("ys") => {

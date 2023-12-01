@@ -23,3 +23,7 @@ ycc2: ${BIN} ./y86/arithmetric.yc
 ycc3: ${BIN} ./y86/eq.yc
 		@echo "test (  2  + 4 ) == (1+2) * 2"
 		${BIN} run ./y86/eq.yc --log-level 0
+
+ycc4: ${BIN} ./y86/4assign.yc
+		@echo "test (  1  + 2 ) * (3 + 4) = 21 = 0x15"
+		${BIN} run ./y86/4assign.yc --log-level 0
