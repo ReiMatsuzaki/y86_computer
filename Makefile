@@ -25,5 +25,5 @@ ycc3: ${BIN} ./y86/eq.yc
 		${BIN} run ./y86/eq.yc --log-level 0
 
 ycc4: ${BIN} ./y86/4assign.yc
-		@echo "test (  1  + 2 ) * (3 + 4) = 21 = 0x15"
+		@echo "test (  1  - 2 ) + (3 * 4) = 11 = 0xB"
 		${BIN} run ./y86/4assign.yc --log-level 0

@@ -56,7 +56,7 @@ fn main() -> io::Result<()> {
         Some("yc") => {
             println!("ycc start");
             // let statements_old = ycc::compile(&contents);
-            let statements = ycc::scompile(&contents);
+            let statements = ycc::scompile(&contents, *log_level);
             statements
         }
         Some("ys") => {

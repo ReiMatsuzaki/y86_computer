@@ -20,6 +20,8 @@ pub mod tokenizer {
                     if let Some('=') = chars.peek() {
                         tokens.push(Token::Op2(['=', '=']));
                         chars.next();
+                    } else {
+                        tokens.push(Token::Op('='));
                     }
                 }
                 '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | ';' => {
@@ -143,8 +145,8 @@ pub mod simpl {
 
         fn parse_prog(&mut self) -> Prog {
             let mut stmts = vec![self.parse_stmt()];
-            while let Some(&Token::Op(';')) = self.tokens.get(self.pos) {
-                self.pos += 1;
+            println!("pos: {}, token[pos]: {:?}", self.pos, self.tokens.get(self.pos));
+            while self.pos < self.tokens.len() {
                 stmts.push(self.parse_stmt());
             }
             Prog { stmts }
@@ -250,7 +252,7 @@ pub mod simpl {
                 Some(Token::Id(id)) => {
                     self.pos += 1;
                     let name = String::from(id);
-                    let offset = (id.as_bytes()[0] - ('a' as u8)) as u64;
+                    let offset = 8 * (id.as_bytes()[0] - ('a' as u8)) as u64;
                     Box::new(Node::Variable(name, offset))
                 }
                 Some(Token::Op('(')) => {
@@ -480,10 +482,16 @@ pub mod simpl {
     }
 }
 
-pub fn scompile(src: &str) -> Vec<Statement> {
+pub fn scompile(src: &str, verbose: i64) -> Vec<Statement> {
     let tokens = tokenizer::tokenize(src);
+    if verbose >= 1 {
+        println!("tokens: {:?}", tokens)
+    }
     let mut parser = simpl::Parser::new(tokens);
     let prog = parser.parse();
+    if verbose >= 1 {
+        println!("AST: {:?}", prog)
+    }
     let coder = simpl::Coder {};
     let codes = coder.code(&prog);
     codes
