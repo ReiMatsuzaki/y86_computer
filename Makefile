@@ -26,4 +26,4 @@ ycc3: ${BIN} ./y86/eq.yc
 
 ycc4: ${BIN} ./y86/4assign.yc
 		@echo "test (  1  - 2 ) + (3 * 4) = 11 = 0xB"
-		${BIN} run ./y86/4assign.yc --log-level 0
+		${BIN} run ./y86/4assign.yc --log-level 0 --watch-memory-range 400:527

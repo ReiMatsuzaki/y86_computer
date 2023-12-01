@@ -2,12 +2,9 @@ use core::panic;
 use std::{fs, io};
 
 // use csapp_y86_64::make_machine;
-use csapp::utils::print_bytes;
 mod yas;
 mod ycc;
 mod yis;
-// extern crate clap;
-// use clap::{Arg, App};
 use std::ffi::OsStr;
 use std::path::Path;
 
@@ -69,11 +66,14 @@ fn main() -> io::Result<()> {
         }
         _ => panic!("unexpected extension"),
     };
-    println!("\nyas statements:");
-    for s in &statements {
-        println!("{:?}", s);
+    if *log_level > 1 {
+        println!("\nyas statements:");
+        for s in &statements {
+            println!("{:?}", s);
+        }
     }
 
+    println!("yas coder start");
     let bytes = match yas::code(&statements) {
         Result::Ok(bs) => bs,
         Result::Err(e) => panic!("{}", e),
@@ -81,21 +81,17 @@ fn main() -> io::Result<()> {
 
     if command == "build" {
         println!("\nbytes:");
-        print_bytes(&bytes);
+        // print_bytes(&bytes);
     } else if command == "run" {
+        println!("yis start");
         let mut machine = yis::make_machine(*log_level, wrange);
-        println!("\nload bytes into memory");
         machine.load(0, &bytes);
-
-        println!("machine start");
         machine.start();
-
-        println!("machine halt.");
+        println!("yis halt.");
         println!("\nregisters:");
-        machine.print_registers();
+        machine.print_registers();        
     } else {
         panic!("unexpected command")
     }
-
     Ok(())
 }

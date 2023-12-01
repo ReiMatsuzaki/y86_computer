@@ -8,6 +8,7 @@ pub mod tokenizer {
         Op2([char; 2]),
         Num(u64),
         Id(String),
+        Return,
     }
 
     pub fn tokenize(src: &str) -> Vec<Token> {
@@ -42,18 +43,22 @@ pub mod tokenizer {
                     tokens.push(Token::Num(num.parse::<u64>().unwrap()));
                 }
                 _ => {
-                    let mut id = String::new();
-                    id.push(c);
+                    let mut buf = String::new();
+                    buf.push(c);
                     while let Some(&c) = chars.peek() {
                         match c {
                             'a'..='z' | 'A'..='Z' | '0'..='9' => {
-                                id.push(c);
+                                buf.push(c);
                                 chars.next();
                             }
                             _ => break,
                         }
                     }
-                    tokens.push(Token::Id(id));
+                    if buf == "return" {
+                        tokens.push(Token::Return);
+                    } else {
+                        tokens.push(Token::Id(buf));
+                    }
                 }
             }
         }
@@ -99,11 +104,20 @@ pub mod simpl {
     use crate::yas::{Imm, ModDest, Register, Statement};
 
     const INIT_SP: u64 = 512; // initial stack pointer
-    const NUM_LVAR: u64 = 10; // number of local variable
+    const NUM_LVAR: u64 = 3; // number of local variable
 
     #[derive(Debug, PartialEq)]
     pub struct Prog {
         stmts: Vec<Box<Node>>,
+    }
+
+    impl Prog {
+        pub fn display(&self) {
+            println!("Prog:");
+            for a in &self.stmts {
+                println!("{:?}", a);
+            }
+        }
     }
 
     #[derive(Debug, PartialEq)]
@@ -127,6 +141,7 @@ pub mod simpl {
     #[derive(Debug, PartialEq)]
     enum UnaryOp {
         Neg,
+        Ret,
     }
 
     pub struct Parser {
@@ -145,7 +160,6 @@ pub mod simpl {
 
         fn parse_prog(&mut self) -> Prog {
             let mut stmts = vec![self.parse_stmt()];
-            println!("pos: {}, token[pos]: {:?}", self.pos, self.tokens.get(self.pos));
             while self.pos < self.tokens.len() {
                 stmts.push(self.parse_stmt());
             }
@@ -153,13 +167,19 @@ pub mod simpl {
         }
 
         fn parse_stmt(&mut self) -> Box<Node> {
-            let expr = self.parse_expr();
+            let stmt = if let Some(&Token::Return) = self.tokens.get(self.pos) {
+                self.pos += 1;
+                let expr = self.parse_expr();
+                Box::new(Node::UnaryOp(UnaryOp::Ret, expr))
+            } else {
+                self.parse_expr()
+            };
             if let Some(&Token::Op(';')) = self.tokens.get(self.pos) {
                 self.pos += 1;
             } else {
                 panic!("expected ';', but found {:?}", self.tokens[self.pos]);
             }
-            expr
+            stmt
         }
 
         fn parse_expr(&mut self) -> Box<Node> {
@@ -252,7 +272,7 @@ pub mod simpl {
                 Some(Token::Id(id)) => {
                     self.pos += 1;
                     let name = String::from(id);
-                    let offset = 8 * (id.as_bytes()[0] - ('a' as u8)) as u64;
+                    let offset = 8 * (id.as_bytes()[0] - ('a' as u8) + 1) as u64;
                     Box::new(Node::Variable(name, offset))
                 }
                 Some(Token::Op('(')) => {
@@ -278,9 +298,8 @@ pub mod simpl {
             let mut stmts = self.code_prologue();
             for node in &prog.stmts {
                 stmts.append(&mut self.code_node(node));
+                stmts.push(Statement::Popq(Register::RCX));
             }
-            stmts.append(&mut self.code_epilogue());
-
             stmts
         }
 
@@ -289,22 +308,21 @@ pub mod simpl {
                 // initialize stack pointer and meaning less base pointer
                 Statement::Irmovq(Imm::Integer(INIT_SP), Register::RSP),
                 Statement::Irmovq(Imm::Integer(INIT_SP + 10), Register::RBP),
-                // Prologue
-                // save base pointer and set current stack pointer to base pointer
+
+                // push artificial return address (call)
+                Statement::Irmovq(Imm::Integer(1000), Register::RBX),
+                Statement::Pushq(Register::RBX),
+
+                // ==== enter function heare ====
+
+                // save previous registers
                 Statement::Pushq(Register::RBP),
+                // set new base pointer
                 Statement::Rrmovq(Register::RSP, Register::RBP),
+
                 // allocate local variables
                 Statement::Irmovq(Imm::Integer(NUM_LVAR * 8), Register::RAX),
                 Statement::Subq(Register::RAX, Register::RSP),
-            ]
-        }
-
-        fn code_epilogue(&self) -> Vec<Statement> {
-            vec![
-                // deallocate local variables
-                Statement::Rrmovq(Register::RBP, Register::RSP),
-                // restore base pointer
-                Statement::Popq(Register::RBP),
             ]
         }
 
@@ -346,6 +364,25 @@ pub mod simpl {
                     };
                     codes.append(&mut ss);
                     codes.push(Statement::Pushq(Register::RAX));
+                    codes
+                }
+                Node::UnaryOp(UnaryOp::Ret, node) => {
+                    let mut codes = self.code_node(node);
+                    let mut ss = vec![
+                        // remove current result
+                        Statement::Popq(Register::RAX),
+
+                        // deallocate local variables
+                        Statement::Irmovq(Imm::Integer(NUM_LVAR * 8), Register::RBX),
+                        Statement::Addq(Register::RBX, Register::RSP),
+
+                        // restore old register
+                        Statement::Popq(Register::RBP),
+
+                        // return
+                        Statement::Ret
+                    ];
+                    codes.append(&mut ss);
                     codes
                 }
                 Node::UnaryOp(UnaryOp::Neg, unode) => {
@@ -442,8 +479,9 @@ pub mod simpl {
                 Statement::Popq(Register::RAX),
                 Statement::Addq(Register::RBX, Register::RAX),
                 Statement::Pushq(Register::RAX),
+
+                Statement::Popq(Register::RCX),
             ]);
-            expe.append(&mut coder.code_epilogue());
             let calc = coder.code(&p);
             assert_eq!(expe, calc);
         }
@@ -490,7 +528,7 @@ pub fn scompile(src: &str, verbose: i64) -> Vec<Statement> {
     let mut parser = simpl::Parser::new(tokens);
     let prog = parser.parse();
     if verbose >= 1 {
-        println!("AST: {:?}", prog)
+        prog.display();
     }
     let coder = simpl::Coder {};
     let codes = coder.code(&prog);

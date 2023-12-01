@@ -400,8 +400,7 @@ impl SeqProcessor {
         if self.verbose >= 1 {
             self.print_registers();
             if let Some((s, e)) = self.watch_memory_range {
-                let x = &self.memory[s..e];
-                print_bytes(&Vec::from(x));
+                print_bytes(&Vec::from(self.memory), Some(s), Some(e));
             }
             println!("");
         }
