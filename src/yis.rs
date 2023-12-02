@@ -1,5 +1,7 @@
 use std::fmt;
 
+use csapp::utils::print_bytes;
+
 const MEM_SIZE: usize = 10000;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -428,9 +430,9 @@ impl SeqProcessor {
         if self.verbose >= 2 {
             self.print_registers();
             self.print_stack();
-            if let Some((_, _)) = self.watch_memory_range {
-                panic!("print meory is not implemented now.")
-                // print_bytes(&Vec::from(self.memory), Some(s), Some(e));
+            if let Some((s, e)) = self.watch_memory_range {
+                // panic!("print meory is not implemented now.")
+                print_bytes(&Vec::from(self.memory), Some(s), Some(e));
             }
             println!("");
         }

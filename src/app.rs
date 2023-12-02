@@ -9,6 +9,11 @@ pub fn run(
     log_level: i64,
     wrange: Option<(usize, usize)>,
 ) -> u64 {
+    let contents = if !contents.contains("main") {
+        String::from("main(c) {\n") + &contents + "\n}"
+    } else {
+        String::from(contents)
+    };
     let statements = match extension {
         "yc" => {
             if log_level >= 0 {
