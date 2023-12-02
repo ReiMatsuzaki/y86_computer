@@ -10,7 +10,7 @@ pub fn run(
     wrange: Option<(usize, usize)>,
 ) -> u64 {
     let contents = if !contents.contains("main") {
-        String::from("main(c) {\n") + &contents + "\n}"
+        String::from("main() {\n") + &contents + "\n}"
     } else {
         String::from(contents)
     };
@@ -49,6 +49,9 @@ pub fn run(
         Result::Ok(bs) => bs,
         Result::Err(e) => panic!("{}", e),
     };
+    if log_level >= 0 {
+        println!("byte code: {0}", bytes.len());
+    }
 
     if command == "build" {
         println!("\nbytes:");
@@ -62,7 +65,11 @@ pub fn run(
         machine.load(0, &bytes);
         let maybe_cycle = machine.start();
         match maybe_cycle {
-            Some(cycle) => println!("halted. cycle: {}", cycle),
+            Some(cycle) => {
+                if log_level >= 0 {
+                    println!("halted. cycle: {}", cycle)
+                }
+            }
             None => println!("too much cycles. stopped."),
         }
         if log_level >= 0 {
@@ -91,6 +98,19 @@ mod tests {
         run(extension, &contents, command, log_level, wrange)
     }
 
+
+    #[test]
+    fn test_plus() {
+        let filename = "y86/plus.yc";
+        assert_eq!(0x6, run_file(filename));
+    }
+
+    #[test]
+    fn test_arithmetric() {
+        let filename = "y86/arithmetric.yc";
+        assert_eq!(0x21, run_file(filename));
+    }
+
     #[test]
     fn test_var() {
         let filename = "y86/4var.yc";
@@ -113,5 +133,11 @@ mod tests {
     fn test_block() {
         let filename = "y86/7block.yc";
         assert_eq!(0x18, run_file(filename));
+    }
+
+    #[test]
+    fn test_def() {
+        let filename = "y86/8def.yc";
+        assert_eq!(0x5, run_file(filename));
     }
 }

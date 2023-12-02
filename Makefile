@@ -39,3 +39,7 @@ ycc6: ${BIN} ./y86/6while.yc
 ycc7: ${BIN} ./y86/7block.yc
 		@echo "test block. expect=(1+3)*(3+3)=4*6=24=0x18"
 		${BIN} run ./y86/7block.yc --log-level 0
+
+ycc8: ${BIN} ./y86/8def.yc
+		@echo "test def. expect 8"
+		${BIN} run ./y86/8def.yc --log-level 0

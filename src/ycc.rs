@@ -27,7 +27,7 @@ pub mod tokenizer {
                         tokens.push(Token::Op('='));
                     }
                 }
-                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | ';' | '{' | '}' => {
+                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | ';' | '{' | '}' | ',' => {
                     tokens.push(Token::Op(c));
                 }
                 '0'..='9' => {
@@ -129,11 +129,13 @@ pub mod tokenizer {
 }
 
 pub mod simpl {
-    // program = stmt*
+    // program = def
+    // def     = name "(" (ident ("," ident)*)? ")" "{" stmt* "}"
     // stmt    = expr ";" |
     //           "return" expr ";" |
     //           "while" "(" expr ")" stmt |
     //           "if" "(" expr ")" stmt "else" stmt
+    //           "{" stmt* "}"
     // expr    = assign
     // assign  = rel ("=" assign)?
     // rel     = add ("==" add)*
@@ -145,7 +147,6 @@ pub mod simpl {
     use crate::yas::{Dest, Imm, ModDest, Register, Statement};
 
     pub const INIT_SP: u64 = 2816; // initial stack pointer
-    const NUM_LVAR: u64 = 3; // number of local variable
 
     #[derive(Debug, PartialEq)]
     pub struct Prog {
@@ -172,9 +173,10 @@ pub mod simpl {
         BinaryOp(BinaryOp, Box<Node>, Box<Node>),
         UnaryOp(UnaryOp, Box<Node>),
         Num(u64),
-        Variable(String, u64), // FIXME: define Variable type
+        Variable(String, i64), // name, offset; variable address is (offset + %RBP)
         Block(Vec<Box<Node>>),
-        Def(String, Vec<Box<Node>>, Box<Node>), // name, args(Variables), block
+        Def(String, Vec<String>, Box<Node>, usize), // name, args(String), block, num_lvar
+        Call(String, Vec<Box<Node>>),           // name, args(each Node is Expr)
     }
 
     #[derive(Debug, PartialEq)]
@@ -199,11 +201,13 @@ pub mod simpl {
     pub struct Parser {
         pub(crate) tokens: Vec<Token>,
         pos: usize,
+        args: Vec<String>,
+        lvars: Vec<String>,
     }
 
     impl Parser {
         pub fn new(tokens: Vec<Token>) -> Self {
-            Parser { tokens, pos: 0 }
+            Parser { tokens, pos: 0, args: vec![], lvars: vec![] }
         }
 
         pub fn parse(&mut self) -> Prog {
@@ -244,10 +248,7 @@ pub mod simpl {
                                 break;
                             }
                             Token::Id(s) => {
-                                args.push(Box::new(Node::Variable(
-                                    String::from(s),
-                                    Self::easy_offset(s),
-                                )));
+                                args.push(String::from(s));
                                 self.pos += 1;
                                 if let Some(&token) = self.tokens.get(self.pos).as_ref() {
                                     match token {
@@ -267,27 +268,18 @@ pub mod simpl {
                             _ => panic!("unexpected token in function def: {:?}", token),
                         }
                     }
-                    self.expect(&Token::Op('{'));
-                    let mut stmts = vec![];
-                    while let Some(&token) = self.tokens.get(self.pos).as_ref() {
-                        match token {
-                            Token::Op('}') => {
-                                self.pos += 1;
-                                break;
-                            }
-                            _ => stmts.push(self.parse_stmt()),
-                        }
-                    }
-                    Box::new(Node::Def(name, args, Box::new(Node::Block(stmts))))
+
+                    // init lvars and args. Pushed them in self.parse_stmt()
+                    self.lvars = vec![];
+                    self.args = args;
+                    let block = self.parse_stmt();
+                    let num_lvar = self.lvars.len();
+                    let args = self.args.clone();
+                    Box::new(Node::Def(name, args, block, num_lvar))
                 }
                 Some(_) => panic!("invalid token, pos={0}", self.pos),
                 None => panic!("token not found. pos={}", self.pos),
             }
-        }
-
-        fn easy_offset(s: &str) -> u64 {
-            // FIXME: remove this
-            8 * (s.as_bytes()[0] - ('a' as u8) + 1) as u64
         }
 
         fn parse_stmt(&mut self) -> Box<Node> {
@@ -431,8 +423,45 @@ pub mod simpl {
                 Some(Token::Id(id)) => {
                     self.pos += 1;
                     let name = String::from(id);
-                    let offset = Self::easy_offset(id.as_str());
-                    Box::new(Node::Variable(name, offset))
+                    if let Some(Token::Op('(')) = self.tokens.get(self.pos) {
+                        // function call
+                        self.pos += 1;
+                        let mut args = vec![];
+                        while let Some(&token) = self.tokens.get(self.pos).as_ref() {
+                            match token {
+                                Token::Op(')') => {
+                                    self.pos += 1;
+                                    break;
+                                }
+                                Token::Op(',') => {
+                                    self.pos += 1;
+                                }
+                                _ => args.push(self.parse_expr()),
+                            }
+                        }
+                        Box::new(Node::Call(name, args))
+                    } else {
+                        // variable
+                        //                      +-(RBP)
+                        // stack = .. L2 L1 L0 OB RE A0 A1 A2 ..
+                        match self.args.iter().position(|x| x == id) {
+                            Some(i) => {
+                                // argument case
+                                Box::new(Node::Variable(id.to_string(), 8 * (2 + i as i64)))
+                            }
+                            None => match self.lvars.iter().position(|x| x == id) {
+                                Some(i) => {
+                                    // local variable
+                                    Box::new(Node::Variable(id.to_string(), -8 * (1 + i as i64)))
+                                }
+                                None => {
+                                    let offset = -8 * (self.lvars.len() as i64 + 1);
+                                    self.lvars.push(id.to_string());
+                                    Box::new(Node::Variable(id.to_string(), offset))
+                                }
+                            }
+                        }
+                    }
                 }
                 Some(Token::Op('(')) => {
                     self.pos += 1;
@@ -460,37 +489,35 @@ pub mod simpl {
         }
 
         fn code_prologue(&self) -> Vec<Statement> {
-            vec![
+            let mut codes = vec![
                 // initialize stack pointer and meaning less base pointer
                 Statement::Irmovq(Imm::Integer(INIT_SP), Register::RSP),
                 Statement::Irmovq(Imm::Integer(INIT_SP + 10), Register::RBP),
-                // push artificial return address (mimic call)
-                Statement::Irmovq(Imm::Integer(41), Register::RBX),
-                Statement::Pushq(Register::RBX),
-                Statement::Jmp(Dest::Label(String::from("main"))),
-                
-                // return from main.
-                Statement::Pushq(Register::RAX),
-                Statement::Halt,
-            ]
+            ];
+            let n = Box::new(Node::Call("main".to_string(), vec![]));
+            codes.append(&mut self.code_expr(&n));
+            codes.append(&mut vec![Statement::Halt]);
+            codes
         }
 
         fn code_stmt(&self, node: &Node) -> Vec<Statement> {
             // parse node as stmt. number of stack is presevered. exception is ret.
             match node {
-                Node::Def(name, _, block) => {
+                Node::Def(name, _, block, num_lvar) => {
                     let mut codes = vec![
+                        // stack = .. .. .. .. RE (RE is return addressed)
                         // jump label
                         Statement::Label(name.to_string()),
                         // save previous registers
                         Statement::Pushq(Register::RBP),
+                        // stack = .. .. .. OB RE (OB is old base pointer)
                         // set new base pointer
                         Statement::Rrmovq(Register::RSP, Register::RBP),
-                        // allocate local variables
-                        Statement::Irmovq(Imm::Integer(NUM_LVAR * 8), Register::RAX),
+                        // allocate local variables  (deallocating is done in ret)
+                        Statement::Irmovq(Imm::Integer(*num_lvar as u64 * 8), Register::RAX),
                         Statement::Subq(Register::RAX, Register::RSP),
+                        // stack = .. L2 L1 OB RE (LNs are local variable)
                     ];
-                    // FIXME:: define args as local variables
                     codes.append(&mut self.code_stmt(block));
                     codes
                 }
@@ -540,13 +567,16 @@ pub mod simpl {
                     let mut codes = vec![];
                     codes.append(&mut self.code_expr(node));
                     codes.append(&mut vec![
+                        // stack = RV L2 L1 OB RE (RV=resultant value. OB is old base pointer. RE is return address)
                         // remove current result
                         Statement::Popq(Register::RAX),
+                        // stack = .. L2 L1 OB RE 
                         // deallocate local variables
                         Statement::Rrmovq(Register::RBP, Register::RSP),
+                        // stack = .. .. .. OB RE 
                         // restore old register
                         Statement::Popq(Register::RBP),
-                        // return
+                        // stack = .. .. .. .. RE
                         Statement::Ret,
                     ]);
                     codes
@@ -640,6 +670,27 @@ pub mod simpl {
                     codes.push(Statement::Pushq(Register::RAX));
                     codes
                 }
+                Node::Call(name, args) => {
+                    let mut codes = vec![];
+                    // stack = .. .. .. .. ..
+                    // push args on stack
+                    for i in 0..args.len() {
+                        codes.append(&mut self.code_expr(&args[i]));
+                    }
+                    // stack = .. .. .. a1 a2   (a1 and a2 are argument)
+                    // call
+                    codes.push(Statement::Call(Dest::Label(name.to_string())));
+                    // stack = .. .. .. a1 a2
+                    // pop args on stack
+                    for _ in 0..args.len() {
+                        codes.push(Statement::Popq(Register::RCX));
+                    }
+                    // stack = .. .. .. .. ..
+                    // push function return value
+                    codes.push(Statement::Pushq(Register::RAX));
+                    // stack = .. .. .. .. RV   (RV is return value)
+                    codes
+                }
                 _ => panic!("unexpected node in code_expr. node={:?}", node),
             }
         }
@@ -647,10 +698,16 @@ pub mod simpl {
         fn code_lvar(&self, node: &Node) -> Vec<Statement> {
             match node {
                 Node::Variable(_, offset) => {
+                    let abs_offset = offset.abs() as u64;
                     vec![
-                        Statement::Irmovq(Imm::Integer(*offset), Register::RAX),
+                        // FIXME: support Irmovq for negative integer
+                        Statement::Irmovq(Imm::Integer(abs_offset), Register::RAX),
                         Statement::Rrmovq(Register::RBP, Register::RBX),
-                        Statement::Subq(Register::RAX, Register::RBX),
+                        if *offset >= 0 {
+                            Statement::Addq(Register::RAX, Register::RBX)
+                        } else {
+                            Statement::Subq(Register::RAX, Register::RBX)
+                        },
                         Statement::Pushq(Register::RBX),
                     ]
                 }
@@ -678,7 +735,7 @@ pub mod simpl {
                 Token::Num(5),
                 // Token::Op(';'),
             ];
-            let mut parser = Parser { tokens, pos: 0 };
+            let mut parser = Parser::new(tokens);
             let m_1 = num(1);
             let m_2_3 = mul(num(2), neg(num(3)));
             let m_4_5 = div(num(4), num(5));
@@ -702,17 +759,17 @@ pub mod simpl {
                 Token::Num(1),
                 Token::Op(';'),
             ];
-            let mut parser = Parser { tokens, pos: 0 };
+            let mut parser = Parser::new(tokens);
             let expe = Box::new(Node::BinaryOp(
                 BinaryOp::If,
                 Box::new(Node::BinaryOp(
                     BinaryOp::Eq,
-                    Box::new(Node::Variable(String::from("a"), 8)),
+                    Box::new(Node::Variable(String::from("a"), -8)),
                     Box::new(Node::Num(2)),
                 )),
                 Box::new(Node::BinaryOp(
                     BinaryOp::Assign,
-                    Box::new(Node::Variable(String::from("b"), 16)),
+                    Box::new(Node::Variable(String::from("b"), -16)),
                     Box::new(Node::Num(1)),
                 )),
             ));
@@ -725,10 +782,10 @@ pub mod simpl {
             let tokens = vec![
                 Token::If,
                 Token::Op('('),
-                Token::Id(String::from("c")),
+                Token::Id(String::from("xxb")),
                 Token::Op(')'),
                 Token::Op('{'),
-                Token::Id(String::from("a")),
+                Token::Id(String::from("abc")),
                 Token::Op('='),
                 Token::Num(1),
                 Token::Op(';'),
@@ -736,14 +793,14 @@ pub mod simpl {
                 Token::Op(';'),
                 Token::Op('}'),
             ];
-            let mut parser = Parser { tokens, pos: 0 };
+            let mut parser = Parser::new(tokens);
             let expe = Box::new(Node::BinaryOp(
                 BinaryOp::If,
-                Box::new(Node::Variable(String::from("c"), 24)),
+                Box::new(Node::Variable(String::from("xxb"), -8)),
                 Box::new(Node::Block(vec![
                     Box::new(Node::BinaryOp(
                         BinaryOp::Assign,
-                        Box::new(Node::Variable(String::from("a"), 8)),
+                        Box::new(Node::Variable(String::from("abc"), -16)),
                         Box::new(Node::Num(1)),
                     )),
                     Box::new(Node::Num(4)),
@@ -765,29 +822,35 @@ pub mod simpl {
                 Token::Op('{'),
                 Token::Id(String::from("c")),
                 Token::Op('='),
-                Token::Num(1),
+                Token::Id(String::from("a")),
+                Token::Op('+'),
+                Token::Id(String::from("b")),
                 Token::Op(';'),
-                Token::Num(4),
+                Token::Id(String::from("d")),
+                Token::Op('='),
+                Token::Id(String::from("c")),
                 Token::Op(';'),
                 Token::Op('}'),
             ];
-            let mut parser = Parser { tokens, pos: 0 };
+            let mut parser = Parser::new(tokens);
+            let var_a = var("a", 8+8);
+            let var_b = var("b", 8+16);
+            let var_c = var("c", -8);
+            let var_c2 = var("c", -8);
+            let var_d = var("d", -16);
             let expe = Prog {
                 node: block(vec![Box::new(Node::Def(
                     String::from("f"),
                     vec![
-                        Box::new(Node::Variable(String::from("a"), 8)),
-                        Box::new(Node::Variable(String::from("b"), 16)),
+                        String::from("a"),
+                        String::from("b"),
                     ],
                     block(vec![
-                        Box::new(Node::BinaryOp(
-                            BinaryOp::Assign,
-                            Box::new(Node::Variable(String::from("c"), 24)),
-                            Box::new(Node::Num(1)),
-                        )),
-                        Box::new(Node::Num(4)),
+                        assign(var_c, add(var_a, var_b)),
+                        assign(var_d, var_c2),
                     ]),
-                ))]),
+                    2,
+                ))])
             };
             let calc = parser.parse_prog();
             assert_eq!(expe, calc);
@@ -845,9 +908,13 @@ pub mod simpl {
         //     Box::new(Node::BinaryOp(BinaryOp::Eq, left, right))
         // }
 
-        // fn assign(left: Box<Node>, right: Box<Node>) -> Box<Node> {
-        //     Box::new(Node::BinaryOp(BinaryOp::Assign, left, right))
-        // }
+        fn assign(left: Box<Node>, right: Box<Node>) -> Box<Node> {
+            Box::new(Node::BinaryOp(BinaryOp::Assign, left, right))
+        }
+
+        fn var(name: &str, offset: i64) -> Box<Node> {
+            Box::new(Node::Variable(name.to_string(), offset))
+        }
 
         fn block(stmts: Vec<Box<Node>>) -> Box<Node> {
             Box::new(Node::Block(stmts))
