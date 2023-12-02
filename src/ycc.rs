@@ -411,6 +411,7 @@ pub mod simpl {
                     codes
                 }
                 Node::BinaryOp(BinaryOp::If, cond, then) => {
+                    // FIXME: change label name to avoid conflict
                     let false_label = "iffalse";
                     let mut codes = self.code_node(cond);
                     let mut codes_cond = vec![
@@ -427,22 +428,28 @@ pub mod simpl {
                     codes
                 },
                 Node::BinaryOp(BinaryOp::While, cond, then) => {
+                    // FIXME: separate code_node to code_expr and code_stmt
                     // FIXME: change label name to avoid conflict
                     let begin_label = "whilebegin";
                     let end_label = "whileend";
-                    let mut codes = self.code_node(cond);
-                    let mut codes_cond = vec![
-                        Statement::Label(begin_label.to_string()),
+                    let mut codes = vec![];
+                    codes.append(&mut vec![
+                        Statement::Label(begin_label.to_string())]);
+                    codes.append(&mut 
+                        self.code_node(cond));
+                    codes.append(&mut vec![
                         Statement::Popq(Register::RAX),
                         Statement::Irmovq(Imm::Integer(0), Register::RBX),
                         Statement::Addq(Register::RBX, Register::RAX),
                         Statement::Je(Dest::Label(end_label.to_string())),
-                    ];
-                    codes.append(&mut codes_cond);
+                    ]);
                     codes.append(&mut self.code_node(then));
-                    // FIXME: change je -> jmp
-                    codes.push(Statement::Je(Dest::Label(begin_label.to_string())));
-                    codes.push(Statement::Label(end_label.to_string()));
+                    codes.append(&mut vec![
+                        Statement::Popq(Register::RAX), // remove "then" result
+                        Statement::Jmp(Dest::Label(begin_label.to_string())),
+                        Statement::Label(end_label.to_string()),
+                        Statement::Pushq(Register::RAX), // push meaning less value
+                    ]);
                     codes
                 },
                 Node::BinaryOp(op, left, right) => {

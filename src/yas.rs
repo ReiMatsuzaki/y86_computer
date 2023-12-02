@@ -149,6 +149,9 @@ pub enum Statement {
     Orq(Register, Register),
     Mulq(Register, Register),
     Divq(Register, Register),    
+    Jmp(Dest),
+    // Jle(Dest),
+    // Jl(Dest),
     Je(Dest),
     Jne(Dest),
     Call(Dest),
@@ -243,6 +246,9 @@ fn byte_length(statement: &Statement) -> u64 {
         Statement::Mulq(_, _) => 2,
         Statement::Divq(_, _) => 2,        
 
+        Statement::Jmp(_) => 9,
+        // Statement::Jle(_) => 9,
+        // Statement::Jl(_) => 9,
         Statement::Je(_) => 9,
         Statement::Jne(_) => 9,
 
@@ -363,6 +369,9 @@ fn assemble_one(
         Statement::Mulq(ra, rb) => Result::Ok(vec![0x64, ass_reg(Some(ra), Some(rb))]),
         Statement::Divq(ra, rb) => Result::Ok(vec![0x65, ass_reg(Some(ra), Some(rb))]),
 
+        Statement::Jmp(d) => f_v(0x70, d, symbol_table),
+        // Statement::Jle(d) => f_v(0x71, d, symbol_table),        
+        // Statement::Jl(d) => f_v(0x72, d, symbol_table),
         Statement::Je(d) => f_v(0x73, d, symbol_table),
         Statement::Jne(d) => f_v(0x74, d, symbol_table),
 

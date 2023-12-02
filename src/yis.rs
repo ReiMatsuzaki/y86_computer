@@ -55,6 +55,9 @@ pub enum OpqFn {
 
 #[derive(Debug, Clone, Copy)]
 pub enum JxxFn {
+    JMP,
+    JLE,
+    JL,
     JE,
     JNE,
 }
@@ -97,7 +100,9 @@ fn decode_codefn(x: u8) -> Option<CodeFn> {
         0x64 => Some(CodeFn::OPQ(OpqFn::MUL)),
         0x65 => Some(CodeFn::OPQ(OpqFn::DIV)),
 
-
+        0x70 => Some(CodeFn::JXX(JxxFn::JMP)),
+        0x71 => Some(CodeFn::JXX(JxxFn::JLE)),
+        0x72 => Some(CodeFn::JXX(JxxFn::JL)),
         0x73 => Some(CodeFn::JXX(JxxFn::JE)),
         0x74 => Some(CodeFn::JXX(JxxFn::JNE)),
         0x80 => Some(CodeFn::CALL),
@@ -250,6 +255,9 @@ impl SeqProcessor {
             CodeFn::MRMOVQ => (0xF, src_a),
             CodeFn::OPQ(_) => (src_b, 0xF),
             CodeFn::JXX(_) => (0xF, 0xF),
+            CodeFn::CMOVXX(JxxFn::JMP) => (src_b, 0xF),
+            CodeFn::CMOVXX(JxxFn::JLE) => (if self.sf==1 || self.zf==1 {src_b} else {0xF}, 0xF),
+            CodeFn::CMOVXX(JxxFn::JL) => (if self.zf==1 && self.zf==0 {src_b} else {0xF}, 0xF),
             CodeFn::CMOVXX(JxxFn::JE) => (if self.zf==1 {src_b} else {0xF}, 0xF),
             CodeFn::CMOVXX(JxxFn::JNE) => (if self.zf==1 {0xF} else {src_b}, 0xF),
             CodeFn::CALL => (rsp, 0xF),
@@ -343,19 +351,19 @@ impl SeqProcessor {
         let val_c = f.val_c as usize;
         let val_p = f.val_p;
         let val_m = m.val_m as usize;
+
         self.pc = match f.code_fn {
             CodeFn::CALL => val_c,
             CodeFn::RET => val_m,
             CodeFn::JXX(j) => {
                 let jump = match j {
+                    JxxFn::JMP => true,
+                    JxxFn::JLE => self.sf == 1 || self.zf == 1,
+                    JxxFn::JL => self.sf == 1 && self.zf == 0,
                     JxxFn::JE => self.zf == 1,
                     JxxFn::JNE => self.zf == 0,
                 };
-                if jump {
-                    val_c
-                } else {
-                    val_p
-                }
+                if jump {val_c} else {val_p}
             }
             _ => f.val_p,
         };
@@ -434,7 +442,7 @@ impl SeqProcessor {
         }
     }
     pub fn start(&mut self) -> Option<u64> {
-        for cyc in 0..100 {
+        for cyc in 0..1000 {
             self.cycle();
             if self.stat == Y8S::HLT {
                 return Some(cyc)
