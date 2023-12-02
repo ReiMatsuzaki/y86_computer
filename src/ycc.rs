@@ -149,14 +149,20 @@ pub mod simpl {
 
     #[derive(Debug, PartialEq)]
     pub struct Prog {
-        stmts: Vec<Box<Node>>,
+        node: Box<Node>,
     }
 
     impl Prog {
         pub fn display(&self) {
             println!("Prog:");
-            for a in &self.stmts {
-                println!("{:?}", a);
+            let node = &(*self.node);
+            match node {
+                Node::Block(stmts) => {
+                    for a in stmts {
+                        println!("{:?}", a);
+                    }
+                }
+                _ => panic!("unexpected node in Prog"),
             }
         }
     }
@@ -216,7 +222,8 @@ pub mod simpl {
             while self.pos < self.tokens.len() {
                 stmts.push(self.parse_stmt());
             }
-            Prog { stmts }
+            let node = Box::new(Node::Block(stmts));
+            Prog { node }
         }
 
         fn parse_stmt(&mut self) -> Box<Node> {
@@ -384,10 +391,7 @@ pub mod simpl {
     impl Coder {
         pub fn code(&self, prog: &Prog) -> Vec<Statement> {
             let mut stmts = self.code_prologue();
-            for node in &prog.stmts {
-                stmts.append(&mut self.code_node(node));
-                stmts.push(Statement::Popq(Register::RCX));
-            }
+            stmts.append(&mut self.code_stmt(&prog.node));
             stmts
         }
 
@@ -414,52 +418,35 @@ pub mod simpl {
             ]
         }
 
-        fn code_node(&self, node: &Node) -> Vec<Statement> {
+        fn code_stmt(&self, node: &Node) -> Vec<Statement> {
+            // parse node as stmt. number of stack is presevered. exception is ret.
             match node {
                 Node::Block(stmts) => {
-                    // FIXME:: dupilicated code with "fn code)"
                     let mut codes = vec![];
                     for stmt in stmts {
-                        codes.append(&mut self.code_node(stmt));
-                        codes.push(Statement::Popq(Register::RCX));
+                        codes.append(&mut self.code_stmt(stmt));
                     }
-                    codes.push(Statement::Pushq(Register::RCX)); // push meaning less value
-                    codes
-                }
-                Node::BinaryOp(BinaryOp::Assign, left, right) => {
-                    let mut codes = self.code_lvar(left);
-                    codes.append(&mut self.code_node(right));
-                    codes.push(Statement::Popq(Register::RBX));
-                    codes.push(Statement::Popq(Register::RAX)); // (%rax) = %rbx
-                    codes.push(Statement::Rmmovq(
-                        Register::RBX,
-                        ModDest {
-                            dest: crate::yas::Dest::Integer(0),
-                            register: Register::RAX,
-                        },
-                    ));
-                    codes.push(Statement::Pushq(Register::RBX));
                     codes
                 }
                 Node::BinaryOp(BinaryOp::If, cond, then) => {
                     // FIXME: change label name to avoid conflict
                     let false_label = "iffalse";
-                    let mut codes = self.code_node(cond);
-                    let mut codes_cond = vec![
+                    let mut codes = vec![];
+                    codes.append(&mut 
+                        self.code_expr(cond));
+                    codes.append(&mut vec![
                         Statement::Popq(Register::RAX),
                         Statement::Irmovq(Imm::Integer(0), Register::RBX),
                         Statement::Subq(Register::RBX, Register::RAX),
-                        Statement::Pushq(Register::RAX),
                         Statement::Je(Dest::Label(false_label.to_string())),
-                        Statement::Popq(Register::RAX),
-                    ];
-                    codes.append(&mut codes_cond);
-                    codes.append(&mut self.code_node(then));
-                    codes.push(Statement::Label(false_label.to_string()));
+                    ]);
+                    codes.append(&mut self.code_stmt(then));
+                    codes.append(&mut vec![
+                        Statement::Label(false_label.to_string()),
+                    ]);
                     codes
-                },
+                }
                 Node::BinaryOp(BinaryOp::While, cond, then) => {
-                    // FIXME: separate code_node to code_expr and code_stmt
                     // FIXME: change label name to avoid conflict
                     let begin_label = "whilebegin";
                     let end_label = "whileend";
@@ -467,25 +454,72 @@ pub mod simpl {
                     codes.append(&mut vec![
                         Statement::Label(begin_label.to_string())]);
                     codes.append(&mut 
-                        self.code_node(cond));
+                        self.code_expr(cond));
                     codes.append(&mut vec![
                         Statement::Popq(Register::RAX),
                         Statement::Irmovq(Imm::Integer(0), Register::RBX),
                         Statement::Addq(Register::RBX, Register::RAX),
                         Statement::Je(Dest::Label(end_label.to_string())),
                     ]);
-                    codes.append(&mut self.code_node(then));
+                    codes.append(&mut
+                        self.code_stmt(then));
                     codes.append(&mut vec![
-                        Statement::Popq(Register::RAX), // remove "then" result
                         Statement::Jmp(Dest::Label(begin_label.to_string())),
                         Statement::Label(end_label.to_string()),
-                        Statement::Pushq(Register::RAX), // push meaning less value
                     ]);
                     codes
-                },
+                }
+                Node::UnaryOp(UnaryOp::Ret, node) => {
+                    let mut codes = vec![];
+                    codes.append(&mut
+                        self.code_expr(node));
+                    codes.append(&mut vec![
+                        // remove current result
+                        Statement::Popq(Register::RAX),
+
+                        // deallocate local variables
+                        Statement::Rrmovq(Register::RBP, Register::RSP),
+
+                        // restore old register
+                        Statement::Popq(Register::RBP),
+
+                        // return
+                        Statement::Ret,
+                    ]);
+                    codes
+                }
+                _ => {
+                    let mut codes = self.code_expr(node);
+                    codes.push(Statement::Popq(Register::RAX));
+                    codes
+                }
+            }
+        }
+
+        fn code_expr(&self, node: &Node) -> Vec<Statement> {
+            // parse node as expr and remain result at stack top
+            match node {
+                Node::BinaryOp(BinaryOp::Assign, left, right) => {
+                    let mut codes = self.code_lvar(left);
+                    codes.append(&mut 
+                        self.code_expr(right));
+                    codes.append(&mut vec![
+                        Statement::Popq(Register::RBX),
+                        Statement::Popq(Register::RAX), // (%rax) = %rbx
+                        Statement::Rmmovq(
+                            Register::RBX,
+                            ModDest {
+                                dest: crate::yas::Dest::Integer(0),
+                                register: Register::RAX,
+                            },
+                        ),
+                        Statement::Pushq(Register::RBX),
+                    ]);
+                    codes
+                }
                 Node::BinaryOp(op, left, right) => {
-                    let mut codes = self.code_node(left);
-                    codes.append(&mut self.code_node(right));
+                    let mut codes = self.code_expr(left);
+                    codes.append(&mut self.code_expr(right));
                     codes.push(Statement::Popq(Register::RBX));
                     codes.push(Statement::Popq(Register::RAX)); // %rax OP %rbx
                     let mut ss = match op {
@@ -513,28 +547,9 @@ pub mod simpl {
                     codes.push(Statement::Pushq(Register::RAX));
                     codes
                 }
-                Node::UnaryOp(UnaryOp::Ret, node) => {
-                    let mut codes = self.code_node(node);
-                    let mut ss = vec![
-                        // remove current result
-                        Statement::Popq(Register::RAX),
-
-                        // deallocate local variables
-                        Statement::Irmovq(Imm::Integer(NUM_LVAR * 8), Register::RBX),
-                        Statement::Addq(Register::RBX, Register::RSP),
-
-                        // restore old register
-                        Statement::Popq(Register::RBP),
-
-                        // return
-                        Statement::Ret
-                    ];
-                    codes.append(&mut ss);
-                    codes
-                }
                 Node::UnaryOp(UnaryOp::Neg, unode) => {
                     // replace -x => 0 - x
-                    let mut codes = self.code_node(unode);
+                    let mut codes = self.code_expr(unode);
                     let mut ss = vec![
                         Statement::Popq(Register::RBX),
                         Statement::Irmovq(Imm::Integer(0), Register::RAX),
@@ -563,6 +578,7 @@ pub mod simpl {
                     codes.push(Statement::Pushq(Register::RAX));
                     codes
                 }
+                _ => panic!("unexpected node in code_expr. node={:?}", node),
             }
         }
 
@@ -605,7 +621,7 @@ pub mod simpl {
             let m_2_3 = mul(num(2), neg(num(3)));
             let m_4_5 = div(num(4), num(5));
             let expe = sub(add(m_1, m_2_3), m_4_5);
-            let expe = Prog { stmts: vec![expe] };
+            let expe = Prog{node: block(vec![expe])};
             let calc = parser.parse_prog();
             assert_eq!(expe, calc);
         }
@@ -625,8 +641,8 @@ pub mod simpl {
                 Token::Op(';'),
             ];
             let mut parser = Parser { tokens, pos: 0 };
-            let expe = Prog {
-                stmts: vec![Box::new(Node::BinaryOp(
+            let expe = Prog { node: Box::new(Node::Block(
+                vec![Box::new(Node::BinaryOp(
                     BinaryOp::If,
                     Box::new(Node::BinaryOp(
                         BinaryOp::Eq,
@@ -639,7 +655,7 @@ pub mod simpl {
                         Box::new(Node::Num(1)),
                     )),
                 ))],
-            };
+            ))};
             let calc = parser.parse_prog();
             assert_eq!(expe, calc);
         }
@@ -682,7 +698,7 @@ pub mod simpl {
                     Box::new(Node::Variable(String::from("b"), 16)),
                     Box::new(Node::Num(3)),
             ));
-            let expe = Prog {stmts: vec![stmt1, stmt2]};
+            let expe = Prog{node: block(vec![stmt1, stmt2])};
             let calc = parser.parse_prog();
             assert_eq!(expe, calc);            
         }
@@ -692,7 +708,7 @@ pub mod simpl {
             let coder = Coder {};
             // a = 1 + 2
             let a = add(num(23), num(34));
-            let p = Prog { stmts: vec![a]};
+            let p = Prog{node: block(vec![a])};
             let mut expe = coder.code_prologue();
             expe.append(&mut vec![
                 Statement::Irmovq(Imm::Integer(23), Register::RBX),
@@ -704,7 +720,7 @@ pub mod simpl {
                 Statement::Addq(Register::RBX, Register::RAX),
                 Statement::Pushq(Register::RAX),
 
-                Statement::Popq(Register::RCX),
+                Statement::Popq(Register::RAX),
             ]);
             let calc = coder.code(&p);
             assert_eq!(expe, calc);
@@ -741,6 +757,10 @@ pub mod simpl {
         // fn assign(left: Box<Node>, right: Box<Node>) -> Box<Node> {
         //     Box::new(Node::BinaryOp(BinaryOp::Assign, left, right))
         // }
+
+        fn block(stmts: Vec<Box<Node>>) -> Box<Node> {
+            Box::new(Node::Block(stmts))
+        }
     }
 }
 
