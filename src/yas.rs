@@ -155,6 +155,7 @@ pub enum Statement {
     Je(Dest),
     Jne(Dest),
     Call(Dest),
+    Cmovl(Register, Register),
     Cmove(Register, Register),
     Cmovne(Register, Register),
     Ret,
@@ -252,6 +253,7 @@ fn byte_length(statement: &Statement) -> u64 {
         Statement::Je(_) => 9,
         Statement::Jne(_) => 9,
 
+        Statement::Cmovl(_, _) => 2,
         Statement::Cmove(_, _) => 2,
         Statement::Cmovne(_, _) => 2,
 
@@ -375,6 +377,7 @@ fn assemble_one(
         Statement::Je(d) => f_v(0x73, d, symbol_table),
         Statement::Jne(d) => f_v(0x74, d, symbol_table),
 
+        Statement::Cmovl(ra, rb) => Result::Ok(vec![0x22, ass_reg(Some(ra), Some(rb))]),
         Statement::Cmove(ra, rb) => Result::Ok(vec![0x23, ass_reg(Some(ra), Some(rb))]),
         Statement::Cmovne(ra, rb) => Result::Ok(vec![0x24, ass_reg(Some(ra), Some(rb))]),        
 

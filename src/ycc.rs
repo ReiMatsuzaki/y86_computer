@@ -177,6 +177,7 @@ pub mod simpl {
         Div,
         Assign,
         Eq,
+        Less,
         If,
         While,
     }
@@ -272,7 +273,12 @@ pub mod simpl {
                         self.pos += 1;
                         let right = self.parse_add();
                         left = Box::new(Node::BinaryOp(BinaryOp::Eq, left, right));
-                    }
+                    },
+                    Token::Op('<') => {
+                        self.pos += 1;
+                        let right = self.parse_add();
+                        left = Box::new(Node::BinaryOp(BinaryOp::Less, left, right));
+                    },
                     _ => break,
                 }
             }
@@ -468,6 +474,13 @@ pub mod simpl {
                             Statement::Subq(Register::RBX, Register::RAX),
                             Statement::Cmove(Register::RDI, Register::RSI),
                             Statement::Rrmovq(Register::RSI, Register::RAX),
+                        ],
+                        BinaryOp::Less => vec![
+                            Statement::Irmovq(Imm::Integer(0), Register::RSI),
+                            Statement::Irmovq(Imm::Integer(1), Register::RDI),
+                            Statement::Subq(Register::RBX, Register::RAX),
+                            Statement::Cmovl(Register::RDI, Register::RSI),
+                            Statement::Rrmovq(Register::RSI, Register::RAX),                            
                         ],
                         _ => panic!("unexpected binary op"),
                     };

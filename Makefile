@@ -33,5 +33,5 @@ ycc5: ${BIN} ./y86/5assign.yc
 		${BIN} run ./y86/5assign.yc --log-level 0
 
 ycc6: ${BIN} ./y86/6while.yc
-		@echo "test while statement."
-		${BIN} run ./y86/6while.yc --log-level 2
+		@echo "test while statement. expect 7"
+		${BIN} run ./y86/6while.yc --log-level 0

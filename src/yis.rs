@@ -87,6 +87,7 @@ fn decode_codefn(x: u8) -> Option<CodeFn> {
         0x00 => Some(CodeFn::HALT),
         0x10 => Some(CodeFn::NOP),
         0x20 => Some(CodeFn::RRMOVQ),
+        0x22 => Some(CodeFn::CMOVXX(JxxFn::JL)),
         0x23 => Some(CodeFn::CMOVXX(JxxFn::JE)),
         0x24 => Some(CodeFn::CMOVXX(JxxFn::JNE)),
         0x30 => Some(CodeFn::IRMOVQ),
@@ -257,7 +258,7 @@ impl SeqProcessor {
             CodeFn::JXX(_) => (0xF, 0xF),
             CodeFn::CMOVXX(JxxFn::JMP) => (src_b, 0xF),
             CodeFn::CMOVXX(JxxFn::JLE) => (if self.sf==1 || self.zf==1 {src_b} else {0xF}, 0xF),
-            CodeFn::CMOVXX(JxxFn::JL) => (if self.zf==1 && self.zf==0 {src_b} else {0xF}, 0xF),
+            CodeFn::CMOVXX(JxxFn::JL) => (if self.sf==1 && self.zf==0 {src_b} else {0xF}, 0xF),
             CodeFn::CMOVXX(JxxFn::JE) => (if self.zf==1 {src_b} else {0xF}, 0xF),
             CodeFn::CMOVXX(JxxFn::JNE) => (if self.zf==1 {0xF} else {src_b}, 0xF),
             CodeFn::CALL => (rsp, 0xF),
@@ -380,7 +381,7 @@ impl SeqProcessor {
             self.get_register(Y8R::RSI),
             self.get_register(Y8R::RDI),
         );
-        println!("ZF={0}", self.zf);
+        println!("ZF={0}, SF={1}", self.zf, self.sf);
         // println!(" R8=0x{0:X},  R9=0x{1:X}, R10=0x{2:X}, R11=0x{3:X}",
         //     self.regs[Y8R::R8 as usize],
         //     self.regs[Y8R::R9 as usize],
