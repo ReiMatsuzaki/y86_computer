@@ -27,4 +27,3 @@ pub mod utils {
     }
 }
 
-// Y86_64 simulator

@@ -1,10 +1,10 @@
-use core::panic;
 use std::{fs, io};
 
 // use csapp_y86_64::make_machine;
 mod yas;
 mod ycc;
 mod yis;
+mod app;
 use std::ffi::OsStr;
 use std::path::Path;
 
@@ -45,56 +45,12 @@ fn main() -> io::Result<()> {
             _ => None,
         }
     });
-    println!("{:?}", wrange);
+    println!("waching memory range: {:?}", wrange);
 
-    let extension = Path::new(filename).extension().and_then(OsStr::to_str);
+    let extension = Path::new(filename).extension().and_then(OsStr::to_str).unwrap();
     let contents = fs::read_to_string(filename)?;
-    let statements = match extension {
-        Some("yc") => {
-            println!("ycc start");
-            // let statements_old = ycc::compile(&contents);
-            let statements = ycc::scompile(&contents, *log_level);
-            statements
-        }
-        Some("ys") => {
-            println!("yas parser start");
-            let statements = match yas::parse_body(&contents) {
-                Result::Ok(ss) => ss,
-                Result::Err(e) => panic!("{}", e),
-            };
-            statements
-        }
-        _ => panic!("unexpected extension"),
-    };
-    if *log_level >= 1 {
-        println!("\nyas statements:");
-        for s in &statements {
-            println!("{:?}", s);
-        }
-    }
 
-    println!("yas coder start");
-    let bytes = match yas::code(&statements) {
-        Result::Ok(bs) => bs,
-        Result::Err(e) => panic!("{}", e),
-    };
+    app::run(&extension, &contents, command, *log_level, wrange);
 
-    if command == "build" {
-        println!("\nbytes:");
-        // print_bytes(&bytes);
-    } else if command == "run" {
-        println!("yis start");
-        let mut machine = yis::make_machine(*log_level, wrange);
-        machine.load(0, &bytes);
-        let maybe_cycle = machine.start();
-        match maybe_cycle {
-            Some(cycle) => println!("halted. cycle: {}", cycle),
-            None => println!("too much cycles. stopped."),
-        }
-        println!("\nregisters:");
-        machine.print_registers();        
-    } else {
-        panic!("unexpected command")
-    }
     Ok(())
 }
