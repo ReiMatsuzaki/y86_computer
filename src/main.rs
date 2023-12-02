@@ -66,7 +66,7 @@ fn main() -> io::Result<()> {
         }
         _ => panic!("unexpected extension"),
     };
-    if *log_level > 1 {
+    if *log_level >= 1 {
         println!("\nyas statements:");
         for s in &statements {
             println!("{:?}", s);
@@ -86,8 +86,11 @@ fn main() -> io::Result<()> {
         println!("yis start");
         let mut machine = yis::make_machine(*log_level, wrange);
         machine.load(0, &bytes);
-        machine.start();
-        println!("yis halt.");
+        let maybe_cycle = machine.start();
+        match maybe_cycle {
+            Some(cycle) => println!("halted. cycle: {}", cycle),
+            None => println!("too much cycles. stopped."),
+        }
         println!("\nregisters:");
         machine.print_registers();        
     } else {

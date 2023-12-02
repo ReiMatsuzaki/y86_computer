@@ -9,6 +9,8 @@ pub mod tokenizer {
         Num(u64),
         Id(String),
         Return,
+        While,
+        If,
     }
 
     pub fn tokenize(src: &str) -> Vec<Token> {
@@ -25,7 +27,7 @@ pub mod tokenizer {
                         tokens.push(Token::Op('='));
                     }
                 }
-                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | ';' => {
+                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | ';' | '{' | '}' => {
                     tokens.push(Token::Op(c));
                 }
                 '0'..='9' => {
@@ -54,11 +56,13 @@ pub mod tokenizer {
                             _ => break,
                         }
                     }
-                    if buf == "return" {
-                        tokens.push(Token::Return);
-                    } else {
-                        tokens.push(Token::Id(buf));
-                    }
+                    let t = match buf.as_str() {
+                        "return" => Token::Return,
+                        "if" => Token::If,
+                        "while" => Token::While,
+                        _ => Token::Id(buf),
+                    };
+                    tokens.push(t);
                 }
             }
         }
@@ -87,12 +91,49 @@ pub mod tokenizer {
             let calc = tokenize(input);
             assert_eq!(expe, calc);
         }
+
+        #[test]
+        fn test_statement() {
+            let input = "while (a < 10) { if(a ==2) {a = a + 1; return b; } }";
+            let expe = vec![
+                Token::While,
+                Token::Op('('),
+                Token::Id(String::from("a")),
+                Token::Op('<'),
+                Token::Num(10),
+                Token::Op(')'),
+                Token::Op('{'),
+                Token::If,
+                Token::Op('('),
+                Token::Id(String::from("a")),
+                Token::Op2(['=', '=']),
+                Token::Num(2),
+                Token::Op(')'),
+                Token::Op('{'),
+                Token::Id(String::from("a")),
+                Token::Op('='),
+                Token::Id(String::from("a")),
+                Token::Op('+'),
+                Token::Num(1),
+                Token::Op(';'),
+                Token::Return,
+                Token::Id(String::from("b")),
+                Token::Op(';'),
+                Token::Op('}'),
+                Token::Op('}'),
+            ];
+            let calc = tokenize(input);
+            assert_eq!(expe, calc);
+        }
     }
 }
 
 pub mod simpl {
     // program = stmt*
-    // stmt    = expr ";"
+    // stmt    = expr ";" |
+    //           "return" expr ";" |
+    //           "while" "(" expr ")" stmt |
+    //           "if" "(" expr ")" stmt "else" stmt
     // expr    = assign
     // assign  = rel ("=" assign)?
     // rel     = add ("==" add)*
@@ -101,7 +142,7 @@ pub mod simpl {
     // unary   = ("-")? primary
     // primary = num | ident | "(" expr ")"
     use super::tokenizer::Token;
-    use crate::yas::{Imm, ModDest, Register, Statement};
+    use crate::yas::{Imm, ModDest, Register, Statement, Dest};
 
     const INIT_SP: u64 = 512; // initial stack pointer
     const NUM_LVAR: u64 = 3; // number of local variable
@@ -136,6 +177,8 @@ pub mod simpl {
         Div,
         Assign,
         Eq,
+        If,
+        While,
     }
 
     #[derive(Debug, PartialEq)]
@@ -158,6 +201,14 @@ pub mod simpl {
             self.parse_prog()
         }
 
+        fn expect(&mut self, token: &Token) {
+            if self.tokens[self.pos] == *token {
+                self.pos += 1;
+            } else {
+                panic!("expected {:?}, but found {:?}. pos={2}", token, self.tokens[self.pos], self.pos);
+            }
+        }
+
         fn parse_prog(&mut self) -> Prog {
             let mut stmts = vec![self.parse_stmt()];
             while self.pos < self.tokens.len() {
@@ -167,19 +218,35 @@ pub mod simpl {
         }
 
         fn parse_stmt(&mut self) -> Box<Node> {
-            let stmt = if let Some(&Token::Return) = self.tokens.get(self.pos) {
-                self.pos += 1;
-                let expr = self.parse_expr();
-                Box::new(Node::UnaryOp(UnaryOp::Ret, expr))
-            } else {
-                self.parse_expr()
-            };
-            if let Some(&Token::Op(';')) = self.tokens.get(self.pos) {
-                self.pos += 1;
-            } else {
-                panic!("expected ';', but found {:?}", self.tokens[self.pos]);
+            match self.tokens.get(self.pos) {
+                Some(Token::Return) => {
+                    self.pos += 1;
+                    let expr = self.parse_expr();
+                    self.expect(&Token::Op(';'));
+                    Box::new(Node::UnaryOp(UnaryOp::Ret, expr))
+                },
+                Some(Token::While) => {
+                    self.pos += 1;
+                    self.expect(&Token::Op('('));
+                    let expr = self.parse_expr();
+                    self.expect(&Token::Op(')'));
+                    let stmt = self.parse_stmt();
+                    Box::new(Node::BinaryOp(BinaryOp::While, expr, stmt))
+                },
+                Some(Token::If) => {
+                    self.pos += 1;
+                    self.expect(&Token::Op('('));
+                    let expr = self.parse_expr();
+                    self.expect(&Token::Op(')'));
+                    let stmt = self.parse_stmt();
+                    Box::new(Node::BinaryOp(BinaryOp::If, expr, stmt))                    
+                },
+                _ => {
+                    let expr = self.parse_expr();
+                    self.expect(&Token::Op(';'));
+                    expr
+                }
             }
-            stmt
         }
 
         fn parse_expr(&mut self) -> Box<Node> {
@@ -343,6 +410,41 @@ pub mod simpl {
                     codes.push(Statement::Pushq(Register::RBX));
                     codes
                 }
+                Node::BinaryOp(BinaryOp::If, cond, then) => {
+                    let false_label = "iffalse";
+                    let mut codes = self.code_node(cond);
+                    let mut codes_cond = vec![
+                        Statement::Popq(Register::RAX),
+                        Statement::Irmovq(Imm::Integer(0), Register::RBX),
+                        Statement::Subq(Register::RBX, Register::RAX),
+                        Statement::Pushq(Register::RAX),
+                        Statement::Je(Dest::Label(false_label.to_string())),
+                        Statement::Popq(Register::RAX),
+                    ];
+                    codes.append(&mut codes_cond);
+                    codes.append(&mut self.code_node(then));
+                    codes.push(Statement::Label(false_label.to_string()));
+                    codes
+                },
+                Node::BinaryOp(BinaryOp::While, cond, then) => {
+                    // FIXME: change label name to avoid conflict
+                    let begin_label = "whilebegin";
+                    let end_label = "whileend";
+                    let mut codes = self.code_node(cond);
+                    let mut codes_cond = vec![
+                        Statement::Label(begin_label.to_string()),
+                        Statement::Popq(Register::RAX),
+                        Statement::Irmovq(Imm::Integer(0), Register::RBX),
+                        Statement::Addq(Register::RBX, Register::RAX),
+                        Statement::Je(Dest::Label(end_label.to_string())),
+                    ];
+                    codes.append(&mut codes_cond);
+                    codes.append(&mut self.code_node(then));
+                    // FIXME: change je -> jmp
+                    codes.push(Statement::Je(Dest::Label(begin_label.to_string())));
+                    codes.push(Statement::Label(end_label.to_string()));
+                    codes
+                },
                 Node::BinaryOp(op, left, right) => {
                     let mut codes = self.code_node(left);
                     codes.append(&mut self.code_node(right));
@@ -358,7 +460,7 @@ pub mod simpl {
                             Statement::Irmovq(Imm::Integer(1), Register::RDI),
                             Statement::Subq(Register::RBX, Register::RAX),
                             Statement::Cmove(Register::RDI, Register::RSI),
-                            Statement::Cmove(Register::RSI, Register::RAX),
+                            Statement::Rrmovq(Register::RSI, Register::RAX),
                         ],
                         _ => panic!("unexpected binary op"),
                     };
@@ -462,6 +564,41 @@ pub mod simpl {
             let calc = parser.parse_prog();
             assert_eq!(expe, calc);
         }
+
+        #[test]
+        fn test_parse_statement() {
+            let tokens = vec![
+                Token::If,
+                Token::Op('('),
+                Token::Id(String::from("a")),
+                Token::Op2(['=', '=']),
+                Token::Num(2),
+                Token::Op(')'),
+                Token::Id(String::from("b")),
+                Token::Op('='),
+                Token::Num(1),
+                Token::Op(';'),
+            ];
+            let mut parser = Parser { tokens, pos: 0 };
+            let expe = Prog {
+                stmts: vec![Box::new(Node::BinaryOp(
+                    BinaryOp::If,
+                    Box::new(Node::BinaryOp(
+                        BinaryOp::Eq,
+                        Box::new(Node::Variable(String::from("a"), 8)),
+                        Box::new(Node::Num(2)),
+                    )),
+                    Box::new(Node::BinaryOp(
+                        BinaryOp::Assign,
+                        Box::new(Node::Variable(String::from("b"), 16)),
+                        Box::new(Node::Num(1)),
+                    )),
+                ))],
+            };
+            let calc = parser.parse_prog();
+            assert_eq!(expe, calc);
+        }
+
 
         #[test]
         fn test_code() {

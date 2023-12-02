@@ -361,8 +361,8 @@ impl SeqProcessor {
         };
     }
     pub fn print_registers(&self) {
-        println!("pc=0x{0:0>2X}", self.pc);
-        println!("RAX=0x{0:X}, RBX=0x{1:X}, RCX=0x{2:X}, RDX=0x{3:X}, RSP=0x{4:X}, RBP=0x{5:X}, RSI=0x{6:X}, RDI=0x{7:X}",
+        print!("pc=0x{0:0>2X}, ", self.pc);
+        print!("RAX=0x{0:X}, RBX=0x{1:X}, RCX=0x{2:X}, RDX=0x{3:X}, RSP=0x{4:X}, RBP=0x{5:X}, RSI=0x{6:X}, RDI=0x{7:X}, ",
             self.get_register(Y8R::RAX),
             self.get_register(Y8R::RBX),
             self.get_register(Y8R::RCX),
@@ -372,39 +372,58 @@ impl SeqProcessor {
             self.get_register(Y8R::RSI),
             self.get_register(Y8R::RDI),
         );
-        println!(" R8=0x{0:X},  R9=0x{1:X}, R10=0x{2:X}, R11=0x{3:X}",
-            self.regs[Y8R::R8 as usize],
-            self.regs[Y8R::R9 as usize],
-            self.regs[Y8R::R10 as usize],
-            self.regs[Y8R::R11 as usize],
-        );
+        println!("ZF={0}", self.zf);
+        // println!(" R8=0x{0:X},  R9=0x{1:X}, R10=0x{2:X}, R11=0x{3:X}",
+        //     self.regs[Y8R::R8 as usize],
+        //     self.regs[Y8R::R9 as usize],
+        //     self.regs[Y8R::R10 as usize],
+        //     self.regs[Y8R::R11 as usize],
+        // );
+    }
+    fn print_stack(&self) {
+        let init_sp = 512; // FIXME: magic number written in ycc
+        let mini = self.get_register(Y8R::RSP)/8;
+        println!("stack:");
+        for i in mini..(init_sp/8) {
+            let addr = init_sp - (i-mini+1)*8;
+            let x = read_as_words(&self.memory, addr as usize);
+            print!("{0:>04X} : {1:X} ", addr, x);
+            if addr == self.get_register(Y8R::RBP) {
+                print!(" <- rbp");
+            }
+            if addr == self.get_register(Y8R::RSP) {
+                print!(" <- rsp");
+            }
+            println!("");
+        }
     }
     pub fn cycle(&mut self) {
         let fetched = self.fetch();
-        if self.verbose >= 1 {
-            println!("fetched:\n{}", fetched);
+        if self.verbose >= 2 {
+            println!("fetched: {}", fetched);
         }
         let decoded = self.decode(&fetched);
-        if self.verbose >= 2 {
+        if self.verbose >= 3 {
             println!("{:?}", decoded);
         }
         let executed = self.execute(&fetched, &decoded);
-        if self.verbose >= 2 {
+        if self.verbose >= 3 {
             println!("{:?}", executed);
         }
         let memoried = self.memory(&fetched, &decoded, &executed);
-        if self.verbose >= 2 {
+        if self.verbose >= 3 {
             println!("{:?}", memoried);
         }
         self.write(&fetched, &decoded, &executed, &memoried);
-        if self.verbose >= 1 {
+        if self.verbose >= 2 {
             self.print_registers();
+            self.print_stack();
             if let Some((s, e)) = self.watch_memory_range {
                 print_bytes(&Vec::from(self.memory), Some(s), Some(e));
             }
             println!("");
         }
-        if self.verbose > 2 {
+        if self.verbose > 3 {
             for j in 0..10 {
                 print!("{0:<2}: ", j);
                 for i in 0..16 {
@@ -414,13 +433,14 @@ impl SeqProcessor {
             }
         }
     }
-    pub fn start(&mut self) {
-        loop {
+    pub fn start(&mut self) -> Option<u64> {
+        for cyc in 0..100 {
             self.cycle();
             if self.stat == Y8S::HLT {
-                break;
+                return Some(cyc)
             }
         }
+        None
     }
     // pub fn get_memory(&self, i: usize) -> u8 {
     //     return self.memory[i];
