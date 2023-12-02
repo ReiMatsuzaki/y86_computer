@@ -35,3 +35,7 @@ ycc5: ${BIN} ./y86/5assign.yc
 ycc6: ${BIN} ./y86/6while.yc
 		@echo "test while statement. expect 7"
 		${BIN} run ./y86/6while.yc --log-level 0
+
+ycc7: ${BIN} ./y86/7block.yc
+		@echo "test block. expect=(1+3)*(3+3)=4*6=24=0x18"
+		${BIN} run ./y86/7block.yc --log-level 0

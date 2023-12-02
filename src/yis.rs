@@ -1,6 +1,8 @@
 use csapp::utils::print_bytes;
 use std::fmt;
 
+const MEM_SIZE: usize = 10000;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Y8R {
     RAX = 0x0,
@@ -182,7 +184,7 @@ pub struct SeqProcessor {
     zf: u8,
     sf: u8,
     of: u8,
-    memory: [u8; 1024],
+    memory: [u8; MEM_SIZE],
     stat: Y8S,
 
     verbose: i64,
@@ -390,7 +392,7 @@ impl SeqProcessor {
         // );
     }
     fn print_stack(&self) {
-        let init_sp = 512; // FIXME: magic number written in ycc
+        let init_sp = crate::ycc::simpl::INIT_SP;
         let mini = self.get_register(Y8R::RSP)/8;
         println!("stack:");
         for i in mini..(init_sp/8) {
@@ -466,7 +468,7 @@ pub fn make_machine(verbose: i64, watch_memory_range: Option<(usize, usize)>) ->
         zf: 0,
         sf: 0,
         of: 0,
-        memory: [0; 1024],
+        memory: [0; MEM_SIZE],
         stat: Y8S::AOK,
         verbose,
         watch_memory_range,

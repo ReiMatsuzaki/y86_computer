@@ -144,7 +144,7 @@ pub mod simpl {
     use super::tokenizer::Token;
     use crate::yas::{Imm, ModDest, Register, Statement, Dest};
 
-    const INIT_SP: u64 = 512; // initial stack pointer
+    pub const INIT_SP: u64 = 2816; // initial stack pointer
     const NUM_LVAR: u64 = 3; // number of local variable
 
     #[derive(Debug, PartialEq)]
@@ -167,6 +167,7 @@ pub mod simpl {
         UnaryOp(UnaryOp, Box<Node>),
         Num(u64),
         Variable(String, u64),
+        Block(Vec<Box<Node>>),
     }
 
     #[derive(Debug, PartialEq)]
@@ -220,6 +221,20 @@ pub mod simpl {
 
         fn parse_stmt(&mut self) -> Box<Node> {
             match self.tokens.get(self.pos) {
+                Some(Token::Op('{')) => {
+                    self.pos += 1;
+                    let mut stmts = vec![self.parse_stmt()];
+                    while let Some(&token) = self.tokens.get(self.pos).as_ref() {
+                        match token {
+                            Token::Op('}') => {
+                                self.pos += 1;
+                                break;
+                            }
+                            _ => stmts.push(self.parse_stmt()),
+                        }
+                    }
+                    Box::new(Node::Block(stmts))
+                },
                 Some(Token::Return) => {
                     self.pos += 1;
                     let expr = self.parse_expr();
@@ -401,6 +416,16 @@ pub mod simpl {
 
         fn code_node(&self, node: &Node) -> Vec<Statement> {
             match node {
+                Node::Block(stmts) => {
+                    // FIXME:: dupilicated code with "fn code)"
+                    let mut codes = vec![];
+                    for stmt in stmts {
+                        codes.append(&mut self.code_node(stmt));
+                        codes.push(Statement::Popq(Register::RCX));
+                    }
+                    codes.push(Statement::Pushq(Register::RCX)); // push meaning less value
+                    codes
+                }
                 Node::BinaryOp(BinaryOp::Assign, left, right) => {
                     let mut codes = self.code_lvar(left);
                     codes.append(&mut self.code_node(right));
@@ -619,6 +644,48 @@ pub mod simpl {
             assert_eq!(expe, calc);
         }
 
+        #[test]
+        fn test_parse_statement_block() {
+            let tokens = vec![
+                Token::If,
+                Token::Op('('),
+                Token::Id(String::from("c")),
+                Token::Op(')'),
+                Token::Op('{'),
+                Token::Id(String::from("a")),
+                Token::Op('='),
+                Token::Num(1),
+                Token::Op(';'),
+                Token::Num(4),
+                Token::Op(';'),
+                Token::Op('}'),
+                Token::Id(String::from("b")),
+                Token::Op('+'),
+                Token::Num(3),
+                Token::Op(';'),
+
+            ];
+            let mut parser = Parser { tokens, pos: 0 };
+            let stmt1 = Box::new(Node::BinaryOp(
+                BinaryOp::If,
+                Box::new(Node::Variable(String::from("c"),24)),
+                Box::new(Node::Block(vec![
+                    Box::new(Node::BinaryOp(
+                        BinaryOp::Assign,
+                        Box::new(Node::Variable(String::from("a"), 8)),
+                        Box::new(Node::Num(1)),
+                    )),
+                    Box::new(Node::Num(4)),
+                ]))));
+            let stmt2 = Box::new(Node::BinaryOp(
+                    BinaryOp::Add,
+                    Box::new(Node::Variable(String::from("b"), 16)),
+                    Box::new(Node::Num(3)),
+            ));
+            let expe = Prog {stmts: vec![stmt1, stmt2]};
+            let calc = parser.parse_prog();
+            assert_eq!(expe, calc);            
+        }
 
         #[test]
         fn test_code() {
