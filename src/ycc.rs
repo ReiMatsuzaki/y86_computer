@@ -14,12 +14,14 @@ pub fn scompile(src: &str, verbose: i64) -> Vec<Statement> {
     if verbose >= 1 {
         println!("tokens: {:?}", tokens)
     }
+
     let mut parser = parser::Parser::new(tokens);
     let prog = parser.parse();
     if verbose >= 1 {
         prog.display();
     }
-    let coder = coder::Coder::new();
+
+    let mut coder = coder::Coder::new();
     let codes = coder.code(&prog);
     codes
 }

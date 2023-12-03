@@ -171,7 +171,7 @@ impl Parser {
     }
 
     fn parse_assign(&mut self) -> Box<Node> {
-        let left = self.parse_rel(); // FIXME
+        let left = self.parse_rel();
         if let Some(&Token::Op('=')) = self.tokens.get(self.pos) {
             self.pos += 1;
             let right = self.parse_rel();

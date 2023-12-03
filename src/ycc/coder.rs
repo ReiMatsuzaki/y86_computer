@@ -3,14 +3,16 @@ use super::{node::*, INIT_SP};
 
 use crate::yas::{Dest, Imm, ModDest, Register, Statement};
 
-pub struct Coder {}
+pub struct Coder {
+    label_count: u64
+}
 
 impl Coder {
     pub fn new() -> Self {
-        Coder {}
+        Coder { label_count: 0}
     }
 
-    pub fn code(&self, prog: &Prog) -> Vec<Statement> {
+    pub fn code(&mut self, prog: &Prog) -> Vec<Statement> {
         let mut stmts = self.code_prologue();
         let node = prog.get_node();
         stmts.append(&mut self.code_stmt(&node));
@@ -29,7 +31,13 @@ impl Coder {
         codes
     }
 
-    fn code_stmt(&self, node: &Node) -> Vec<Statement> {
+    fn produce_label(&mut self, base: &str) -> String {
+        let label = format!("{0}_{1}", base, self.label_count);
+        self.label_count += 1;
+        label
+    }
+
+    fn code_stmt(&mut self, node: &Node) -> Vec<Statement> {
         // parse node as stmt. number of stack is presevered. exception is ret.
         match node {
             Node::DefVar => vec![],
@@ -59,8 +67,7 @@ impl Coder {
                 codes
             }
             Node::If(cond, then) => {
-                // FIXME: change label name to avoid conflict
-                let false_label = "iffalse";
+                let false_label = self.produce_label("iffalse");
                 let mut codes = vec![];
                 codes.append(&mut self.code_expr(cond));
                 codes.append(&mut vec![
@@ -74,9 +81,8 @@ impl Coder {
                 codes
             }
             Node::While(cond, then) => {
-                // FIXME: change label name to avoid conflict
-                let begin_label = "whilebegin";
-                let end_label = "whileend";
+                let begin_label = self.produce_label("whilebegin");
+                let end_label = self.produce_label("whileend");
                 let mut codes = vec![];
                 codes.append(&mut vec![Statement::Label(begin_label.to_string())]);
                 codes.append(&mut self.code_expr(cond));
@@ -254,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_code() {
-        let coder = Coder {};
+        let mut coder = Coder::new();
         // a = 1 + 2
         let a = add(num(23), num(34));
         let p = Prog::new(block(vec![a]));
