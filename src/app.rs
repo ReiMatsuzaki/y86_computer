@@ -1,6 +1,5 @@
 use crate::{ycc, yas, yis::{self, Y8R}};
 
-
 // Y86_64 simulator
 pub fn run(
     extension: &str,

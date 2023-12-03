@@ -1,10 +1,10 @@
 use std::{fs, io};
 
 // use csapp_y86_64::make_machine;
+mod app;
+mod yis;
 mod yas;
 mod ycc;
-mod yis;
-mod app;
 use std::ffi::OsStr;
 use std::path::Path;
 

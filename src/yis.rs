@@ -393,7 +393,7 @@ impl SeqProcessor {
         // );
     }
     fn print_stack(&self) {
-        let init_sp = crate::ycc::simpl::INIT_SP;
+        let init_sp = crate::ycc::INIT_SP;
         let mini = self.get_register(Y8R::RSP)/8;
         println!("stack:");
         for i in mini..(init_sp/8) {
