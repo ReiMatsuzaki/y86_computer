@@ -26,7 +26,7 @@ ycc3: ${BIN} ./y86/eq.yc
 
 ycc4: ${BIN} ./y86/4var.yc
 		@echo "test (  1  - 2 ) + (3 * 4) = 11 = 0xB"
-		${BIN} run ./y86/4var.yc --log-level 2 #--watch-memory-range 0:64
+		${BIN} run ./y86/4var.yc --log-level 0 #--watch-memory-range 0:64
 
 ycc5: ${BIN} ./y86/5assign.yc
 		@echo "test if statement. expect 4"
@@ -41,5 +41,5 @@ ycc7: ${BIN} ./y86/7block.yc
 		${BIN} run ./y86/7block.yc --log-level 0
 
 ycc8: ${BIN} ./y86/8def.yc
-		@echo "test def. expect 8"
+		@echo "test def. expect 5"
 		${BIN} run ./y86/8def.yc --log-level 0

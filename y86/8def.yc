@@ -1,9 +1,15 @@
 calc(x, y) {
+  int a;
+  int b;
   a = x + y;
   b = x * y;
   return b - a;
 }
 main() {
+  int a;
+  int b;
+  int c;
+  int res;
   a = 2;
   b = 5;
   c = calc(a, b);
