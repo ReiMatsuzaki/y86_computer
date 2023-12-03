@@ -188,11 +188,30 @@ impl Parser {
                 } else {
                     Type::Int
                 };
-                if let Some(Token::Id(id)) = self.tokens.get(self.pos).cloned() {
+                if let Some(Token::Id(id)) = self.tokens.get(self.pos) {
                     self.pos += 1;
-                    self.expect(&Token::Op(';'));
-                    self.add_lvars(id, ty);
-                    Box::new(Node::DefVar)
+                    match self.tokens.get(self.pos) {
+                        Some(Token::Op(';')) => {
+                            self.pos += 1;
+                            self.add_lvars(id.to_string(), ty);
+                            Box::new(Node::DefVar)
+                        }
+                        Some(Token::Op('[')) => {
+                            self.pos += 1;
+                            let n = match self.tokens[self.pos] {
+                                Token::Num(n) => n,
+                                _ => panic!("unexpected token in defvar"),
+                            };
+                            self.pos += 1;
+                            let id = id.to_string();
+                            self.expect(&Token::Op(']'));
+                            self.expect(&Token::Op(';'));
+                            let ty = Type::Ary(Box::new(ty), n as usize);
+                            self.add_lvars(id.to_string(), ty);
+                            Box::new(Node::DefVar)
+                        }
+                        _ => panic!("unexpected token in defvar"),
+                    }
                 } else {
                     panic!("unexpected token in defvar")
                 }
@@ -533,6 +552,36 @@ mod tests {
         );
         let calc = parser.parse_prog();
         assert_eq!(expe, calc);
+    }
+
+    // FIXME: refactor test name to array_test
+    #[test]
+    fn test_array() {
+        let tokens = vec![
+            Token::Id(String::from("f")),
+            Token::Op('('),
+            Token::Op(')'),
+            Token::Op('{'),
+            Token::Int,
+            Token::Id(String::from("xs")),
+            Token::Op('['),
+            Token::Num(10),
+            Token::Op(']'),
+            Token::Op(';'),
+            Token::Op('}'),
+        ];
+        let mut parser = Parser::new(tokens);
+        let expe = Prog::new(
+            block(vec![Box::new(Node::DefFun(
+                String::from("f"),
+                block(vec![
+                    Box::new(Node::DefVar),
+                ]),
+                8*10,
+            ))]),
+        );
+        let calc = parser.parse_prog();
+        assert_eq!(expe, calc);        
     }
 
 }

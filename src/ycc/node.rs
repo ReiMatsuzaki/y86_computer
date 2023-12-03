@@ -68,6 +68,7 @@ pub enum UnaryOp {
 pub enum Type {
     Int,
     Ptr,
+    Ary(Box<Type>, usize),
 }
 
 impl Type {
@@ -75,6 +76,7 @@ impl Type {
         match self {
             Type::Int => 8,
             Type::Ptr => 8,
+            Type::Ary(t, n) => t.size() * n,
         }
     }
 
