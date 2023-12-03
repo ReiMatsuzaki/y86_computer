@@ -41,7 +41,7 @@ pub enum Node {
     If(Box<Node>, Box<Node>), // cond, then
     While(Box<Node>, Box<Node>), // cond, body
     DefVar,
-    DefFun(String, Box<Node>, usize), // name, block, num_lvar
+    DefFun(String, Box<Node>, usize), // name, block, lvars_bytes
     Call(String, Vec<Box<Node>>),     // name, args(each Node is Expr)
     Ret(Box<Node>), // return expr
 }
@@ -68,6 +68,16 @@ pub enum UnaryOp {
 pub enum Type {
     Int,
     Ptr,
+}
+
+impl Type {
+    pub fn size(&self) -> usize {
+        match self {
+            Type::Int => 8,
+            Type::Ptr => 8,
+        }
+    }
+
 }
 
 #[cfg(test)]

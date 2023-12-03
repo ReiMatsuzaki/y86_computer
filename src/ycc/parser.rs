@@ -90,12 +90,8 @@ impl Parser {
         Prog::new(node)
     }
 
-    fn parse_deffun(&mut self) -> Box<Node> {
-        match self.tokens.get(self.pos) {
-            Some(Token::Id(id)) => {
-                let name = String::from(id);
-                self.pos += 1;
-                self.expect(&Token::Op('('));
+    fn parse_list(&mut self) -> Vec<String> {
+        self.expect(&Token::Op('('));
                 let mut args = vec![];
                 while let Some(&token) = self.tokens.get(self.pos).as_ref() {
                     match token {
@@ -124,13 +120,22 @@ impl Parser {
                         _ => panic!("unexpected token in function def: {:?}", token),
                     }
                 }
+                args
+    }
+
+    fn parse_deffun(&mut self) -> Box<Node> {
+        match self.tokens.get(self.pos) {
+            Some(Token::Id(id)) => {
+                let name = String::from(id);
+                self.pos += 1;
+                let args = self.parse_list();
 
                 // init lvars and args. Pushed to lvars and refered in self.parse_stmt()
                 self.lvars = vec![];
                 self.args = Self::build_arg_vars(&args);
                 let block = self.parse_stmt();
-                let num_lvar = self.lvars.len();
-                Box::new(Node::DefFun(name, block, num_lvar))
+                let lvar_bytes = self.lvars.iter().map(|v| v.ty.size()).sum();
+                Box::new(Node::DefFun(name, block, lvar_bytes))
             }
             Some(_) => panic!("invalid token, pos={0}", self.pos),
             None => panic!("token not found. pos={}", self.pos),
@@ -177,10 +182,16 @@ impl Parser {
             }
             Some(Token::Int) => {
                 self.pos += 1;
+                let ty = if let Some(Token::Op('*')) = self.tokens.get(self.pos) {
+                    self.pos += 1;
+                    Type::Ptr
+                } else {
+                    Type::Int
+                };
                 if let Some(Token::Id(id)) = self.tokens.get(self.pos).cloned() {
                     self.pos += 1;
                     self.expect(&Token::Op(';'));
-                    self.add_lvars(id, Type::Int);
+                    self.add_lvars(id, ty);
                     Box::new(Node::DefVar)
                 } else {
                     panic!("unexpected token in defvar")
@@ -485,6 +496,7 @@ mod tests {
             Token::Id(String::from("c")),
             Token::Op(';'),
             Token::Int,
+            Token::Op('*'),
             Token::Id(String::from("d")),
             Token::Op(';'),                                
             Token::Id(String::from("c")),
@@ -506,7 +518,7 @@ mod tests {
         let var_b = var(Type::Int, 8 + 16);
         let var_c = var(Type::Int, -8);
         let var_c2 = var(Type::Int, -8);
-        let var_d = var(Type::Int, -16);
+        let var_d = var(Type::Ptr, -16);
         let expe = Prog::new(
             block(vec![Box::new(Node::DefFun(
                 String::from("f"),
@@ -516,7 +528,7 @@ mod tests {
                     assign(var_c, add(addr(var_a), deref(var_b))),
                     assign(var_d, var_c2),
                 ]),
-                2,
+                16,
             ))]),
         );
         let calc = parser.parse_prog();

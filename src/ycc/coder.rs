@@ -41,7 +41,7 @@ impl Coder {
         // parse node as stmt. number of stack is presevered. exception is ret.
         match node {
             Node::DefVar => vec![],
-            Node::DefFun(name, block, num_lvar) => {
+            Node::DefFun(name, block, lvars_size) => {
                 let mut codes = vec![
                     // stack = .. .. .. .. RE (RE is return addressed)
                     // jump label
@@ -52,7 +52,7 @@ impl Coder {
                     // set new base pointer
                     Statement::Rrmovq(Register::RSP, Register::RBP),
                     // allocate local variables  (deallocating is done in ret)
-                    Statement::Irmovq(Imm::Integer(*num_lvar as u64 * 8), Register::RAX),
+                    Statement::Irmovq(Imm::Integer(*lvars_size as u64), Register::RAX),
                     Statement::Subq(Register::RAX, Register::RSP),
                     // stack = .. L2 L1 OB RE (LNs are local variable)
                 ];
