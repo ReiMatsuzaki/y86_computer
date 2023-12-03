@@ -19,8 +19,15 @@ use super::token::Token;
 pub struct Parser {
     pub(crate) tokens: Vec<Token>,
     pos: usize,
-    args: Vec<String>,
-    lvars: Vec<String>,
+    args: Vec<Variable>,
+    lvars: Vec<Variable>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+struct Variable {
+    name: String,
+    offset: i64,
+    ty: Type,
 }
 
 impl Parser {
@@ -47,6 +54,31 @@ impl Parser {
                 token, self.tokens[self.pos], self.pos
             );
         }
+    }
+
+    fn build_arg_vars(args: &Vec<String>) -> Vec<Variable> {
+        let mut vars = vec![];
+        for (i, arg) in args.iter().enumerate() {
+            vars.push(Variable {
+                name: arg.to_string(),
+                offset: 8 * (2 + i as i64),
+                ty: Type::Int,
+            });
+        }
+        vars
+    }
+
+    fn add_lvars(&mut self, id: String, ty: Type){
+        if self.lvars.iter().any(|v| v.name.eq(&id)) {
+            panic!("variable already defined");
+        }
+        let offset = -8 * (1 + self.lvars.len() as i64);
+        let v= Variable {
+            name: id.to_string(),
+            offset,
+            ty: ty.clone(),
+        };
+        self.lvars.push(v);
     }
 
     fn parse_prog(&mut self) -> Prog {
@@ -93,13 +125,12 @@ impl Parser {
                     }
                 }
 
-                // init lvars and args. Pushed them in self.parse_stmt()
+                // init lvars and args. Pushed to lvars and refered in self.parse_stmt()
                 self.lvars = vec![];
-                self.args = args;
+                self.args = Self::build_arg_vars(&args);
                 let block = self.parse_stmt();
                 let num_lvar = self.lvars.len();
-                let args = self.args.clone();
-                Box::new(Node::DefFun(name, args, block, num_lvar))
+                Box::new(Node::DefFun(name, block, num_lvar))
             }
             Some(_) => panic!("invalid token, pos={0}", self.pos),
             None => panic!("token not found. pos={}", self.pos),
@@ -148,11 +179,8 @@ impl Parser {
                 self.pos += 1;
                 if let Some(Token::Id(id)) = self.tokens.get(self.pos).cloned() {
                     self.pos += 1;
-                    if self.lvars.contains(&id) {
-                        panic!("variable already defined");
-                    }
                     self.expect(&Token::Op(';'));
-                    self.lvars.push(id.to_string());
+                    self.add_lvars(id, Type::Int);
                     Box::new(Node::DefVar)
                 } else {
                     panic!("unexpected token in defvar")
@@ -314,15 +342,14 @@ impl Parser {
         // variable
         //                      +-(RBP)
         // stack = .. L2 L1 L0 OB RE A0 A1 A2 ..
-        let name = String::from(id);
-        let argi = self.args.iter().position(|x| x == id);
-        let lvari = self.lvars.iter().position(|x| x == id);
-        let offset = match (argi, lvari) {
-            (Some(i), None) => 8 * (2 + i as i64),
-            (None, Some(i)) => -8 * (1 + i as i64),
-            _ => panic!("lvar not found. name={}. pos={}", id, self.pos),
+        let argi = self.args.iter().find(|x| x.name == id);
+        let lvari = self.lvars.iter().find(|x| x.name == id);
+        let v = match (argi, lvari) {
+            (Some(i), None) => i,
+            (None, Some(i)) => i,
+            _ => panic!("lvar not found. name={}. pos={}", id, self.pos)
         };
-        Box::new(Node::Variable(name, offset))
+        Box::new(Node::Variable(v.ty.clone(), v.offset))
     }
 }
 
@@ -383,12 +410,12 @@ mod tests {
             Node::If(
                 Box::new(Node::BinaryOp(
                     BinaryOp::Eq,
-                    Box::new(Node::Variable(String::from("a"), -8)),
+                    Box::new(Node::Variable(Type::Int, -8)),
                     Box::new(Node::Num(2)),
                 )),
                 Box::new(Node::BinaryOp(
                     BinaryOp::Assign,
-                    Box::new(Node::Variable(String::from("b"), -16)),
+                    Box::new(Node::Variable(Type::Int, -16)),
                     Box::new(Node::Num(1)),
                 )),
             ));
@@ -426,11 +453,11 @@ mod tests {
         ];
         let mut parser = Parser::new(tokens);
         let if_stmt = Box::new(Node::If(
-            Box::new(Node::Variable(String::from("xxb"), -8)),
+            Box::new(Node::Variable(Type::Int, -8)),
             Box::new(Node::Block(vec![
                 Box::new(Node::BinaryOp(
                     BinaryOp::Assign,
-                    Box::new(Node::Variable(String::from("abc"), -16)),
+                    Box::new(Node::Variable(Type::Int, -16)),
                     Box::new(Node::Num(1)),
                 )),
                 Box::new(Node::Num(4)),
@@ -475,15 +502,14 @@ mod tests {
             Token::Op('}'),
         ];
         let mut parser = Parser::new(tokens);
-        let var_a = var("a", 8 + 8);
-        let var_b = var("b", 8 + 16);
-        let var_c = var("c", -8);
-        let var_c2 = var("c", -8);
-        let var_d = var("d", -16);
+        let var_a = var(Type::Int, 8 + 8);
+        let var_b = var(Type::Int, 8 + 16);
+        let var_c = var(Type::Int, -8);
+        let var_c2 = var(Type::Int, -8);
+        let var_d = var(Type::Int, -16);
         let expe = Prog::new(
             block(vec![Box::new(Node::DefFun(
                 String::from("f"),
-                vec![String::from("a"), String::from("b")],
                 block(vec![
                     Box::new(Node::DefVar),
                     Box::new(Node::DefVar),

@@ -34,15 +34,15 @@ pub enum Node {
     Num(u64),
     // FIXME: define variable type
     // FIXME: String can be removed
-    Variable(String, i64), // name, offset; variable address is (offset + %RBP)
+    Variable(Type, i64), // type, offset; variable address is (offset + %RBP)
     
     // Stmt
     Block(Vec<Box<Node>>),
     If(Box<Node>, Box<Node>), // cond, then
     While(Box<Node>, Box<Node>), // cond, body
     DefVar,
-    DefFun(String, Vec<String>, Box<Node>, usize), // name, args(String), block, num_lvar
-    Call(String, Vec<Box<Node>>),                  // name, args(each Node is Expr)
+    DefFun(String, Box<Node>, usize), // name, block, num_lvar
+    Call(String, Vec<Box<Node>>),     // name, args(each Node is Expr)
     Ret(Box<Node>), // return expr
 }
 
@@ -64,7 +64,7 @@ pub enum UnaryOp {
     Addr,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Int,
     Ptr,
@@ -106,8 +106,8 @@ pub mod test_utils {
         Box::new(Node::BinaryOp(BinaryOp::Assign, left, right))
     }
 
-    pub fn var(name: &str, offset: i64) -> Box<Node> {
-        Box::new(Node::Variable(name.to_string(), offset))
+    pub fn var(t: Type, offset: i64) -> Box<Node> {
+        Box::new(Node::Variable(t, offset))
     }
 
     pub fn block(stmts: Vec<Box<Node>>) -> Box<Node> {

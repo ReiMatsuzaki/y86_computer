@@ -41,7 +41,7 @@ impl Coder {
         // parse node as stmt. number of stack is presevered. exception is ret.
         match node {
             Node::DefVar => vec![],
-            Node::DefFun(name, _, block, num_lvar) => {
+            Node::DefFun(name, block, num_lvar) => {
                 let mut codes = vec![
                     // stack = .. .. .. .. RE (RE is return addressed)
                     // jump label
@@ -125,6 +125,37 @@ impl Coder {
         }
     }
 
+    fn is_pointer(node: &Node) -> bool {
+        match node {
+            Node::Variable(Type::Ptr, _) => true,
+            _ => false,
+        }
+    }
+
+    fn code_lincomb(&self, x: u64, y: u64, plus_minus: char) -> Vec<Statement> {
+        // calculate x * %rax + y * %rbx and store to %rax
+        // assume %rax and %rbx are 
+        let mut xs = vec![];
+        if x != 1 {
+            xs.append(&mut vec![
+                Statement::Irmovq(Imm::Integer(x), Register::RCX),
+                Statement::Mulq(Register::RCX, Register::RAX),
+            ]);
+        }
+        if y != 1 {
+            xs.append(&mut vec![
+                Statement::Irmovq(Imm::Integer(y), Register::RCX),
+                Statement::Mulq(Register::RCX, Register::RBX),
+            ]);
+        }
+        match plus_minus {
+            '+' => xs.append(&mut vec![Statement::Addq(Register::RBX, Register::RAX)]),
+            '-' => xs.append(&mut vec![Statement::Subq(Register::RBX, Register::RAX)]),
+            _ => panic!("unexpected plus_minus")
+        }  
+        xs
+    }
+
     fn code_expr(&self, node: &Node) -> Vec<Statement> {
         // parse node as expr and remain result at stack top
         match node {
@@ -145,14 +176,22 @@ impl Coder {
                 ]);
                 codes
             }
-            Node::BinaryOp(op, left, right) => {
+            Node::BinaryOp(op, left, right) => {      
                 let mut codes = self.code_expr(left);
                 codes.append(&mut self.code_expr(right));
                 codes.push(Statement::Popq(Register::RBX));
                 codes.push(Statement::Popq(Register::RAX)); // %rax OP %rbx
                 let mut ss = match op {
-                    BinaryOp::Add => vec![Statement::Addq(Register::RBX, Register::RAX)],
-                    BinaryOp::Sub => vec![Statement::Subq(Register::RBX, Register::RAX)],
+                    BinaryOp::Add => {
+                        let x = if Self::is_pointer(right) {8} else {1};
+                        let y = if Self::is_pointer(left) {8} else {1};
+                        self.code_lincomb(x, y, '+')
+                    }
+                    BinaryOp::Sub => {
+                        let x = if Self::is_pointer(right) {8} else {1};
+                        let y = if Self::is_pointer(left) {8} else {1};
+                        self.code_lincomb(x, y, '-')
+                    }
                     BinaryOp::Mul => vec![Statement::Mulq(Register::RBX, Register::RAX)],
                     BinaryOp::Div => vec![Statement::Divq(Register::RBX, Register::RAX)],
                     BinaryOp::Eq => vec![
