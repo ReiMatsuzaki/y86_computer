@@ -35,6 +35,7 @@ pub enum Node {
     // FIXME: define variable type
     // FIXME: String can be removed
     Variable(Type, i64), // type, offset; variable address is (offset + %RBP)
+    AryElem(Type, i64, Box<Node>), // element type, offset, index
     
     // Stmt
     Block(Vec<Box<Node>>),
