@@ -139,4 +139,10 @@ mod tests {
         let filename = "y86/8def.yc";
         assert_eq!(0x5, run_file(filename));
     }
+
+    #[test]
+    fn test_pointer() {
+        let filename = "y86/9pointer.yc";
+        assert_eq!(0x5, run_file(filename));
+    }
 }

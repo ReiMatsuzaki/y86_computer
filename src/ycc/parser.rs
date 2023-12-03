@@ -248,6 +248,16 @@ impl Parser {
                 let primary = self.parse_primary();
                 Box::new(Node::UnaryOp(UnaryOp::Neg, primary))
             }
+            Some(Token::Op('*')) => {
+                self.pos += 1;
+                let primary = self.parse_primary();
+                Box::new(Node::UnaryOp(UnaryOp::Deref, primary))
+            }
+            Some(Token::Op('&')) => {
+                self.pos += 1;
+                let primary = self.parse_primary();
+                Box::new(Node::UnaryOp(UnaryOp::Addr, primary))
+            }
             _ => self.parse_primary(),
         }
     }
@@ -452,8 +462,10 @@ mod tests {
             Token::Op(';'),                                
             Token::Id(String::from("c")),
             Token::Op('='),
+            Token::Op('&'),
             Token::Id(String::from("a")),
             Token::Op('+'),
+            Token::Op('*'),
             Token::Id(String::from("b")),
             Token::Op(';'),
             Token::Id(String::from("d")),
@@ -475,7 +487,7 @@ mod tests {
                 block(vec![
                     Box::new(Node::DefVar),
                     Box::new(Node::DefVar),
-                    assign(var_c, add(var_a, var_b)),
+                    assign(var_c, add(addr(var_a), deref(var_b))),
                     assign(var_d, var_c2),
                 ]),
                 2,

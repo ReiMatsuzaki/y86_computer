@@ -206,6 +206,24 @@ impl Coder {
                 codes.push(Statement::Pushq(Register::RAX));
                 codes
             }
+            Node::UnaryOp(UnaryOp::Deref, expr) => {
+                // assume expr is Variable and push its value (address of something)
+                let mut codes = self.code_expr(expr);
+                codes.push(Statement::Popq(Register::RAX));
+                codes.push(Statement::Mrmovq(
+                    ModDest {
+                        dest: crate::yas::Dest::Integer(0),
+                        register: Register::RAX,
+                    },
+                    Register::RAX,
+                ));
+                codes.push(Statement::Pushq(Register::RAX));
+                codes
+            }
+            Node::UnaryOp(UnaryOp::Addr, expr) => {
+                // assume expr is Variable and push its address
+                self.code_lvar(expr)
+            }
             Node::Call(name, args) => {
                 let mut codes = vec![];
                 // stack = .. .. .. .. ..
@@ -233,6 +251,10 @@ impl Coder {
 
     fn code_lvar(&self, node: &Node) -> Vec<Statement> {
         match node {
+            Node::UnaryOp(UnaryOp::Deref, expr) => {
+                // assume expr is Variable and push its value (address of something)
+                self.code_expr(expr)
+            }
             Node::Variable(_, offset) => {
                 let abs_offset = offset.abs() as u64;
                 vec![

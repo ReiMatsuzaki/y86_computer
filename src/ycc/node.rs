@@ -59,12 +59,15 @@ pub enum BinaryOp {
 #[derive(Debug, PartialEq)]
 pub enum UnaryOp {
     Neg,
-    Ret,
+    Ret, // FIXME: move to Node::Ret(expr)
+    Deref,
+    Addr,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Type {
     Int,
+    Ptr,
 }
 
 #[cfg(test)]
@@ -109,5 +112,13 @@ pub mod test_utils {
 
     pub fn block(stmts: Vec<Box<Node>>) -> Box<Node> {
         Box::new(Node::Block(stmts))
+    }
+
+    pub fn deref(expr: Box<Node>) -> Box<Node> {
+        Box::new(Node::UnaryOp(UnaryOp::Deref, expr))
+    }
+
+    pub fn addr(expr: Box<Node>) -> Box<Node> {
+        Box::new(Node::UnaryOp(UnaryOp::Addr, expr))
     }
 }
