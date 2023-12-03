@@ -126,7 +126,7 @@ impl Parser {
                 self.pos += 1;
                 let expr = self.parse_expr();
                 self.expect(&Token::Op(';'));
-                Box::new(Node::UnaryOp(UnaryOp::Ret, expr))
+                Box::new(Node::Ret(expr))
             }
             Some(Token::While) => {
                 self.pos += 1;

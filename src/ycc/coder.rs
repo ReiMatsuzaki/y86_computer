@@ -99,7 +99,7 @@ impl Coder {
                 ]);
                 codes
             }
-            Node::UnaryOp(UnaryOp::Ret, node) => {
+            Node::Ret(node) => {
                 let mut codes = vec![];
                 codes.append(&mut self.code_expr(node));
                 codes.append(&mut vec![

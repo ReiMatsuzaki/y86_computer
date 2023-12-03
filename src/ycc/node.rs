@@ -43,6 +43,7 @@ pub enum Node {
     DefVar,
     DefFun(String, Vec<String>, Box<Node>, usize), // name, args(String), block, num_lvar
     Call(String, Vec<Box<Node>>),                  // name, args(each Node is Expr)
+    Ret(Box<Node>), // return expr
 }
 
 #[derive(Debug, PartialEq)]
@@ -59,7 +60,6 @@ pub enum BinaryOp {
 #[derive(Debug, PartialEq)]
 pub enum UnaryOp {
     Neg,
-    Ret, // FIXME: move to Node::Ret(expr)
     Deref,
     Addr,
 }
