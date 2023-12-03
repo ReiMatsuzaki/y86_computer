@@ -58,7 +58,7 @@ impl Coder {
                 }
                 codes
             }
-            Node::BinaryOp(BinaryOp::If, cond, then) => {
+            Node::If(cond, then) => {
                 // FIXME: change label name to avoid conflict
                 let false_label = "iffalse";
                 let mut codes = vec![];
@@ -73,7 +73,7 @@ impl Coder {
                 codes.append(&mut vec![Statement::Label(false_label.to_string())]);
                 codes
             }
-            Node::BinaryOp(BinaryOp::While, cond, then) => {
+            Node::While(cond, then) => {
                 // FIXME: change label name to avoid conflict
                 let begin_label = "whilebegin";
                 let end_label = "whileend";

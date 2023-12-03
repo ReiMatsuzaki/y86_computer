@@ -134,7 +134,7 @@ impl Parser {
                 let expr = self.parse_expr();
                 self.expect(&Token::Op(')'));
                 let stmt = self.parse_stmt();
-                Box::new(Node::BinaryOp(BinaryOp::While, expr, stmt))
+                Box::new(Node::While(expr, stmt))
             }
             Some(Token::If) => {
                 self.pos += 1;
@@ -142,7 +142,7 @@ impl Parser {
                 let expr = self.parse_expr();
                 self.expect(&Token::Op(')'));
                 let stmt = self.parse_stmt();
-                Box::new(Node::BinaryOp(BinaryOp::If, expr, stmt))
+                Box::new(Node::If(expr, stmt))
             }
             Some(Token::Int) => {
                 self.pos += 1;
@@ -369,19 +369,19 @@ mod tests {
             Token::Op('}'),
         ];
         let mut parser = Parser::new(tokens);
-        let if_stmt =             Box::new(Node::BinaryOp(
-            BinaryOp::If,
-            Box::new(Node::BinaryOp(
-                BinaryOp::Eq,
-                Box::new(Node::Variable(String::from("a"), -8)),
-                Box::new(Node::Num(2)),
-            )),
-            Box::new(Node::BinaryOp(
-                BinaryOp::Assign,
-                Box::new(Node::Variable(String::from("b"), -16)),
-                Box::new(Node::Num(1)),
-            )),
-        ));
+        let if_stmt = Box::new(
+            Node::If(
+                Box::new(Node::BinaryOp(
+                    BinaryOp::Eq,
+                    Box::new(Node::Variable(String::from("a"), -8)),
+                    Box::new(Node::Num(2)),
+                )),
+                Box::new(Node::BinaryOp(
+                    BinaryOp::Assign,
+                    Box::new(Node::Variable(String::from("b"), -16)),
+                    Box::new(Node::Num(1)),
+                )),
+            ));
         let expe = block(vec![
             Box::new(Node::DefVar),
             Box::new(Node::DefVar),
@@ -415,8 +415,7 @@ mod tests {
             Token::Op('}'),
         ];
         let mut parser = Parser::new(tokens);
-        let if_stmt = Box::new(Node::BinaryOp(
-            BinaryOp::If,
+        let if_stmt = Box::new(Node::If(
             Box::new(Node::Variable(String::from("xxb"), -8)),
             Box::new(Node::Block(vec![
                 Box::new(Node::BinaryOp(
