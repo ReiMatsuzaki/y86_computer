@@ -31,9 +31,11 @@ pub enum Node {
     BinaryOp(BinaryOp, Box<Node>, Box<Node>),
     UnaryOp(UnaryOp, Box<Node>),
     Num(u64),
+    // FIXME: define variable type
+    // FIXME: String can be removed
     Variable(String, i64), // name, offset; variable address is (offset + %RBP)
-    DefVar(Type, String),
     Block(Vec<Box<Node>>),
+    DefVar,
     DefFun(String, Vec<String>, Box<Node>, usize), // name, args(String), block, num_lvar
     Call(String, Vec<Box<Node>>),                  // name, args(each Node is Expr)
 }

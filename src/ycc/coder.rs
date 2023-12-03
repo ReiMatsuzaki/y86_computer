@@ -6,6 +6,10 @@ use crate::yas::{Dest, Imm, ModDest, Register, Statement};
 pub struct Coder {}
 
 impl Coder {
+    pub fn new() -> Self {
+        Coder {}
+    }
+
     pub fn code(&self, prog: &Prog) -> Vec<Statement> {
         let mut stmts = self.code_prologue();
         let node = prog.get_node();
@@ -28,8 +32,7 @@ impl Coder {
     fn code_stmt(&self, node: &Node) -> Vec<Statement> {
         // parse node as stmt. number of stack is presevered. exception is ret.
         match node {
-            // FIXME:: DefVar may be unnecessary
-            Node::DefVar(_, _) => vec![],
+            Node::DefVar => vec![],
             Node::DefFun(name, _, block, num_lvar) => {
                 let mut codes = vec![
                     // stack = .. .. .. .. RE (RE is return addressed)

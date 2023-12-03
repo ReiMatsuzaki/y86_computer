@@ -6,8 +6,6 @@ mod parser;
 mod coder;
 
 use crate::yas::Statement;
-// use crate::ycc::tokenizer;
-// use crate::ycc::parser;
 
 pub const INIT_SP: u64 = 2816; // initial stack pointer
 
@@ -21,7 +19,7 @@ pub fn scompile(src: &str, verbose: i64) -> Vec<Statement> {
     if verbose >= 1 {
         prog.display();
     }
-    let coder = coder::Coder {};
+    let coder = coder::Coder::new();
     let codes = coder.code(&prog);
     codes
 }

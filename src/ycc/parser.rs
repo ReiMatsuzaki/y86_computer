@@ -49,7 +49,7 @@ impl Parser {
         }
     }
 
-    pub fn parse_prog(&mut self) -> Prog {
+    fn parse_prog(&mut self) -> Prog {
         let mut stmts = vec![];
         while self.pos < self.tokens.len() {
             stmts.push(self.parse_deffun());
@@ -106,7 +106,7 @@ impl Parser {
         }
     }
 
-    pub fn parse_stmt(&mut self) -> Box<Node> {
+    fn parse_stmt(&mut self) -> Box<Node> {
         match self.tokens.get(self.pos) {
             Some(Token::Op('{')) => {
                 self.pos += 1;
@@ -153,7 +153,7 @@ impl Parser {
                     }
                     self.expect(&Token::Op(';'));
                     self.lvars.push(id.to_string());
-                    Box::new(Node::DefVar(Type::Int, id.to_string())) // FIXME: Node::DefVar is not needed
+                    Box::new(Node::DefVar)
                 } else {
                     panic!("unexpected token in defvar")
                 }
@@ -166,7 +166,7 @@ impl Parser {
         }
     }
 
-    pub fn parse_expr(&mut self) -> Box<Node> {
+    fn parse_expr(&mut self) -> Box<Node> {
         self.parse_assign()
     }
 
@@ -383,8 +383,8 @@ mod tests {
             )),
         ));
         let expe = block(vec![
-            Box::new(Node::DefVar(Type::Int, String::from("a"))),
-            Box::new(Node::DefVar(Type::Int, String::from("b"))),
+            Box::new(Node::DefVar),
+            Box::new(Node::DefVar),
             if_stmt]);
         let calc = parser.parse_stmt();
         assert_eq!(expe, calc);
@@ -428,8 +428,8 @@ mod tests {
             ])),
         ));
         let expe = block(vec![
-            Box::new(Node::DefVar(Type::Int, String::from("xxb"))),
-            Box::new(Node::DefVar(Type::Int, String::from("abc"))),
+            Box::new(Node::DefVar),
+            Box::new(Node::DefVar),
             if_stmt]);
         let calc = parser.parse_stmt();
         assert_eq!(expe, calc);
@@ -474,8 +474,8 @@ mod tests {
                 String::from("f"),
                 vec![String::from("a"), String::from("b")],
                 block(vec![
-                    Box::new(Node::DefVar(Type::Int, String::from("c"))),
-                    Box::new(Node::DefVar(Type::Int, String::from("d"))),
+                    Box::new(Node::DefVar),
+                    Box::new(Node::DefVar),
                     assign(var_c, add(var_a, var_b)),
                     assign(var_d, var_c2),
                 ]),
