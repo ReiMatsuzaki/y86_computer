@@ -6,7 +6,7 @@ R ::= $RAX | $RCX | $RDX | $RBX | $RSP | $RBP | $RSI | $RDI | $R8 | $R9 | $R10 |
 V ::= \${integer} | Label
 Label ::= [a-zA-Z]+
 */
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, fs};
 
 #[derive(Debug, PartialEq)]
 pub enum Register {
@@ -227,6 +227,14 @@ pub fn parse_body(body: &str) -> Result<Vec<Code>, String> {
         }
     }
     Ok(statements)
+}
+
+pub fn parse_file(filename: &str)  -> Result<Vec<Code>, String> {
+    let src = match fs::read_to_string(filename) {
+        Err(e) => Err(format!("error at reading file: {}", e)),
+        Ok(s) => Ok(s)
+    }?;
+    parse_body(&src)
 }
 
 fn byte_length(statement: &Code) -> u64 {

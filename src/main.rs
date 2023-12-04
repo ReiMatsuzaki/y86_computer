@@ -1,13 +1,10 @@
-use std::{fs, io};
+use std::io;
 
 // use csapp_y86_64::make_machine;
 mod app;
 mod yis;
 mod yas;
 mod ycc;
-use std::ffi::OsStr;
-use std::path::Path;
-
 
 use clap::Parser;
 
@@ -45,11 +42,6 @@ fn main() -> io::Result<()> {
         }
     });
     println!("waching memory range: {:?}", wrange);
-
-    let extension = Path::new(filename).extension().and_then(OsStr::to_str).unwrap();
-    let contents = fs::read_to_string(filename)?;
-
-    app::run(&extension, &contents, command, *log_level, wrange);
-
+    app::run(&filename, command, *log_level, wrange);
     Ok(())
 }

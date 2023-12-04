@@ -36,7 +36,7 @@ struct Variable {
 #[derive(Debug)]
 pub struct ParserError {
     pub token: Token,
-    // pub pos: u64,
+    pub pos: usize,
     pub message: String,
 }
 
@@ -57,6 +57,7 @@ impl Parser {
     fn error<T>(&self, msg: &str) -> Result<T, ParserError> {
         Err(ParserError {
             token: self.tokens[self.pos].clone(),
+            pos: self.pos,
             message: msg.to_string(),
         })
     }
@@ -372,10 +373,7 @@ impl Parser {
                         let (ty, offset) = match v {
                             Node::Variable(Type::Ary(ty, _), offset) => (*ty, offset),
                             _ => {
-                                return Err(ParserError {
-                                    token: self.tokens[self.pos].clone(),
-                                    message: "unexpected type in array access".to_string(),
-                                })
+                                return self.error("unexpected type")
                             }
                         };
                         let index = self.parse_expr()?;

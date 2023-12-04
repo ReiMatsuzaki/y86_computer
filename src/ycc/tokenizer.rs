@@ -1,74 +1,132 @@
+use std::{iter::Peekable, str::Chars};
+
 use super::token::Token;
 
-pub fn tokenize(src: &str) -> Vec<Token> {
-    let mut tokens = Vec::new();
-    let mut chars = src.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            ' ' | '\t' | '\n' => continue,
-            '=' => {
-                if let Some('=') = chars.peek() {
-                    tokens.push(Token::Op2(['=', '=']));
-                    chars.next();
-                } else {
-                    tokens.push(Token::Op('='));
-                }
-            }
-            '+' | '-' | '*' | '(' | ')' | '<' | '>' | ';' | '{' | '}' | ',' | '&' | '[' | ']' => {
-                tokens.push(Token::Op(c));
-            }
-            '/' => {
-                if let Some('/') = chars.peek() {
-                    while let Some(&c) = chars.peek() {
-                        match c {
-                            '\n' => break,
-                            _ => {
-                                chars.next();
-                            }
-                        }
-                    }
-                } else {
-                    tokens.push(Token::Op('/'));
-                }
-            }
-            '0'..='9' => {
-                let mut num = String::new();
-                num.push(c);
-                while let Some(&c) = chars.peek() {
-                    match c {
-                        '0'..='9' => {
-                            num.push(c);
-                            chars.next();
-                        }
-                        _ => break,
-                    }
-                }
-                tokens.push(Token::Num(num.parse::<u64>().unwrap()));
-            }
-            _ => {
-                let mut buf = String::new();
-                buf.push(c);
-                while let Some(&c) = chars.peek() {
-                    match c {
-                        'a'..='z' | 'A'..='Z' | '0'..='9' => {
-                            buf.push(c);
-                            chars.next();
-                        }
-                        _ => break,
-                    }
-                }
-                let t = match buf.as_str() {
-                    "return" => Token::Return,
-                    "if" => Token::If,
-                    "while" => Token::While,
-                    "int" => Token::Int,
-                    _ => Token::Id(buf),
-                };
-                tokens.push(t);
-            }
+struct Tokenizer<'a> {
+    // tokens: Vec<Token>,
+    line_num: usize,
+    col_num: usize,
+    chars: Peekable<Chars<'a>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TokenInfo {
+    pub line_num: usize,
+    pub col_num: usize,
+}
+
+impl<'a> Tokenizer<'a> {
+    pub fn new(src: &str) -> Tokenizer {
+        let chars = src.chars().peekable();
+        Tokenizer {
+            // tokens: Vec::new(),
+            line_num: 1,
+            col_num: 1,
+            chars,
         }
     }
-    tokens
+
+    fn next_with_info(&mut self) -> Option<(char, TokenInfo)> {
+        let ti = TokenInfo {
+            line_num: self.line_num,
+            col_num: self.col_num,
+        };
+        self.next().map(|c| (c, ti))
+    }
+
+    fn next(&mut self) -> Option<char> {
+        let c = self.chars.next();
+        if let Some(c) = c {
+            if c == '\n' {
+                self.line_num += 1;
+                self.col_num = 1;
+            } else {
+                self.col_num += 1;
+            }
+        }
+        c
+    }
+
+    fn peek(&mut self) -> Option<&char> {
+        self.chars.peek()
+    }
+
+    pub fn tokenize(&mut self) -> Vec<(Token, TokenInfo)> {
+        let mut tokens = Vec::new();
+        while let Some((c, ti)) = self.next_with_info() {
+            match c {
+                ' ' | '\t' | '\n' => continue,
+                '=' => {
+                    if let Some('=') = self.peek() {
+                        tokens.push((Token::Op2(['=', '=']), ti));
+                        self.next();
+                    } else {
+                        tokens.push((Token::Op('='), ti));
+                    }
+                }
+                '+' | '-' | '*' | '(' | ')' | '<' | '>' | ';' | '{' | '}' | ',' | '&' | '[' | ']' => {
+                    tokens.push((Token::Op(c), ti));
+                }
+                '/' => {
+                    if let Some('/') = self.peek() {
+                        while let Some(&c) = self.peek() {
+                            match c {
+                                '\n' => break,
+                                _ => {
+                                    self.next();
+                                }
+                            }
+                        }
+                    } else {
+                        tokens.push((Token::Op('/'), ti));
+                    }
+                }
+                '0'..='9' => {
+                    let mut num = String::new();
+                    num.push(c);
+                    while let Some(&c) = self.peek() {
+                        match c {
+                            '0'..='9' => {
+                                num.push(c);
+                                self.next();
+                            }
+                            _ => break,
+                        }
+                    }
+                    tokens.push((Token::Num(num.parse::<u64>().unwrap()), ti));
+                }
+                _ => {
+                    let mut buf = String::new();
+                    buf.push(c);
+                    while let Some(&c) = self.peek() {
+                        match c {
+                            'a'..='z' | 'A'..='Z' | '0'..='9' => {
+                                buf.push(c);
+                                self.next();
+                            }
+                            _ => break,
+                        }
+                    }
+                    let t = match buf.as_str() {
+                        "return" => Token::Return,
+                        "if" => Token::If,
+                        "while" => Token::While,
+                        "int" => Token::Int,
+                        _ => Token::Id(buf),
+                    };
+                    tokens.push((t, ti));
+                }
+            }
+        }
+        tokens
+    }
+}
+
+pub fn tokenize(src: &str) -> (Vec<Token>, Vec<TokenInfo>) {
+    let mut tokenizer = Tokenizer::new(src);
+    let tokens = tokenizer.tokenize();
+    let (tokens, token_infos): (Vec<_>, Vec<_>) = tokens.into_iter().unzip();
+    (tokens, token_infos)
 }
 
 #[cfg(test)]
@@ -79,7 +137,7 @@ mod tests {
     fn test_tokenize() {
         let input = "13 + 2";
         let expe = vec![Token::Num(13), Token::Op('+'), Token::Num(2)];
-        let calc = tokenize(input);
+        let (calc, _) = tokenize(input);
         assert_eq!(expe, calc);
 
         let input = "13 + 2==3";
@@ -90,7 +148,7 @@ mod tests {
             Token::Op2(['=', '=']),
             Token::Num(3),
         ];
-        let calc = tokenize(input);
+        let (calc, _) = tokenize(input);
         assert_eq!(expe, calc);
     }
 
@@ -125,7 +183,7 @@ mod tests {
             Token::Op('}'),
             Token::Op('}'),
         ];
-        let calc = tokenize(input);
+        let (calc, _) = tokenize(input);
         assert_eq!(expe, calc);
     }
 }

@@ -1,32 +1,29 @@
+use std::{path::Path, ffi::OsStr};
+
 use crate::{ycc, yas, yis::{self, Y8R}};
 
 // Y86_64 simulator
 pub fn run(
-    extension: &str,
-    contents: &str,
+    filename: &str,
     command: &str,
     log_level: i64,
     wrange: Option<(usize, usize)>,
 ) -> u64 {
-    let contents = if !contents.contains("main") {
-        String::from("int main() {\n int a;\n int b;\n int c;\n") + &contents + "\n}"
-    } else {
-        String::from(contents)
-    };
+    let extension = Path::new(filename).extension().and_then(OsStr::to_str).unwrap();
     let statements = match extension {
         "yc" => {
             if log_level >= 0 {
                 println!("ycc start");
             }
             // let statements_old = ycc::compile(&contents);
-            let statements = ycc::scompile(&contents, log_level);
+            let statements = ycc::scompile(filename, log_level);
             statements
         }
         "ys" => {
             if log_level >= 0 {
                 println!("yas parser start");
             }
-            let statements = match yas::parse_body(&contents) {
+            let statements = match yas::parse_file(&filename) {
                 Result::Ok(ss) => ss,
                 Result::Err(e) => panic!("{}", e),
             };
@@ -84,17 +81,13 @@ pub fn run(
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use super::*;
 
     fn run_file(filename: &str) -> u64 {
-        let contents = fs::read_to_string(filename).unwrap();
-        let extension = "yc";
         let command = "run";
         let log_level = -1;
         let wrange = None;
-        run(extension, &contents, command, log_level, wrange)
+        run(filename, command, log_level, wrange)
     }
 
 
