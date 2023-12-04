@@ -1,7 +1,6 @@
 // q: change function result type to Result<T, E>
 // a:
 
-
 // program = def
 // def     = name "(" (ident ("," ident)*)? ")" "{" stmt* "}"
 // stmt    = expr ";" |
@@ -37,6 +36,7 @@ struct Variable {
 #[derive(Debug)]
 pub struct ParserError {
     pub token: Token,
+    // pub pos: u64,
     pub message: String,
 }
 
@@ -54,15 +54,19 @@ impl Parser {
         self.parse_prog()
     }
 
+    fn error<T>(&self, msg: &str) -> Result<T, ParserError> {
+        Err(ParserError {
+            token: self.tokens[self.pos].clone(),
+            message: msg.to_string(),
+        })
+    }
+
     fn expect(&mut self, token: &Token) -> Result<(), ParserError> {
         if self.tokens[self.pos] == *token {
             self.pos += 1;
             Ok(())
         } else {
-            Err(ParserError {
-                token: self.tokens[self.pos].clone(),
-                message: "unexpected token.".to_string(),
-            })
+            self.error("unexpected token.")
         }
     }
 
@@ -78,10 +82,7 @@ impl Parser {
                     Ok(Type::Int)
                 }
             }
-            _ => Err(ParserError {
-                token: self.tokens[self.pos].clone(),
-                message: "type is expected".to_string(),
-            })
+            _ => self.error("type is expected"),
         }
     }
 
@@ -91,10 +92,7 @@ impl Parser {
                 self.pos += 1;
                 Ok(s.to_string())
             }
-            _ => Err(ParserError {
-                token: self.tokens[self.pos].clone(),
-                message: "Ident is expected".to_string(),
-            })
+            _ => self.error("Ident is expected"),
         }
     }
 
@@ -104,11 +102,8 @@ impl Parser {
                 self.pos += 1;
                 Ok(i)
             }
-            _ => Err(ParserError {
-                token: self.tokens[self.pos].clone(),
-                message: "Num is expected".to_string(),
-            })
-        }        
+            _ => self.error("Num is expected"),
+        }
     }
 
     fn parse_prog(&mut self) -> Result<Prog, ParserError> {
@@ -122,6 +117,7 @@ impl Parser {
 
     fn parse_deffun(&mut self) -> Result<Box<Node>, ParserError> {
         self.expect(&Token::Int)?;
+        // FIXME: refactor using self.expect_id()
         match self.tokens.get(self.pos) {
             Some(Token::Id(id)) => {
                 let name = String::from(id);
@@ -134,7 +130,7 @@ impl Parser {
                     match token {
                         Token::Op('}') => {
                             self.pos += 1;
-                            break
+                            break;
                         }
                         _ => {
                             let n = self.parse_stmt();
@@ -146,12 +142,13 @@ impl Parser {
                 let lvar_bytes = self.lvars.iter().map(|v| v.ty.size()).sum();
                 Ok(Box::new(Node::DefFun(name, block, lvar_bytes)))
             }
+            // FIXME: remove panic
             Some(_) => panic!("invalid token, pos={0}", self.pos),
             None => panic!("token not found. pos={}", self.pos),
         }
     }
 
-    fn parse_argvar(&mut self) -> Result<(), ParserError>{
+    fn parse_argvar(&mut self) -> Result<(), ParserError> {
         self.expect(&Token::Op('('))?;
         self.args = vec![];
         while let Some(token) = self.tokens.get(self.pos) {
@@ -162,11 +159,7 @@ impl Parser {
             let ty = self.expect_type()?;
             let name = self.expect_id()?;
             let offset = 16 + self.args.iter().map(|v| v.ty.size() as i64).sum::<i64>();
-            self.args.push(Variable {
-                name,
-                offset,
-                ty,
-            });
+            self.args.push(Variable { name, offset, ty });
             match self.tokens.get(self.pos) {
                 Some(Token::Op(')')) => {
                     self.pos += 1;
@@ -175,16 +168,13 @@ impl Parser {
                 Some(Token::Op(',')) => {
                     self.pos += 1;
                 }
-                _ => return Err(ParserError {
-                    token: self.tokens[self.pos].clone(),
-                    message: "Num is expected".to_string(),
-                })
+                _ => return self.error("unexpected token in parse_argvar"),
             }
         }
         Ok(())
     }
 
-    fn parse_defvar(&mut self)  -> Result<(), ParserError> {
+    fn parse_defvar(&mut self) -> Result<(), ParserError> {
         self.lvars = vec![];
         while let Ok(ty) = self.expect_type() {
             let id = self.expect_id()?;
@@ -202,23 +192,17 @@ impl Parser {
                     let ty = Type::Ary(Box::new(ty), n as usize);
                     self.add_lvars(id.to_string(), ty)?;
                 }
-                _ => return Err(ParserError {
-                    token: self.tokens[self.pos].clone(),
-                    message: "unexpected token in defvar.".to_string(),
-                })
-                        }
+                _ => return self.error("unexpected token in defvar."),
+            }
         }
         Ok(())
     }
 
     fn add_lvars(&mut self, id: String, ty: Type) -> Result<(), ParserError> {
         if self.lvars.iter().any(|v| v.name.eq(&id)) {
-            return Err(ParserError {
-                token: self.tokens[self.pos].clone(),
-                message: "variable already defined".to_string(),
-            })
+            return self.error("variable already defined");
         }
-        let offset = -8-self.lvars.iter().map(|v| v.ty.size() as i64).sum::<i64>();
+        let offset = -8 - self.lvars.iter().map(|v| v.ty.size() as i64).sum::<i64>();
         let v = Variable {
             name: id.to_string(),
             offset,
@@ -387,11 +371,13 @@ impl Parser {
                         let v = *self.find_var(&id)?;
                         let (ty, offset) = match v {
                             Node::Variable(Type::Ary(ty, _), offset) => (*ty, offset),
-                            _ => return Err(ParserError {
-                                            token: self.tokens[self.pos].clone(),
-                                            message: "unexpected type in array access".to_string(),
-                                        }),
-                                    };
+                            _ => {
+                                return Err(ParserError {
+                                    token: self.tokens[self.pos].clone(),
+                                    message: "unexpected type in array access".to_string(),
+                                })
+                            }
+                        };
                         let index = self.parse_expr()?;
                         self.expect(&Token::Op(']'))?;
                         Ok(Box::new(Node::AryElem(ty, offset, index)))
@@ -423,10 +409,7 @@ impl Parser {
                 self.expect(&Token::Op(')'))?;
                 Ok(expr)
             }
-            _ => panic!(
-                "unexpected token in primary: {:?}, pos={1}",
-                self.tokens[self.pos], self.pos
-            ),
+            _ => self.error("unexpected token as primary."),
         }
     }
 
@@ -439,10 +422,7 @@ impl Parser {
         let v = match (argi, lvari) {
             (Some(i), None) => i,
             (None, Some(i)) => i,
-            _ => return Err(ParserError {
-                token: self.tokens[self.pos].clone(),
-                message: "lvar not found.".to_string(),
-            })
+            _ => return self.error("lvar not found."),
         };
         Ok(Box::new(Node::Variable(v.ty.clone(), v.offset)))
     }
@@ -567,9 +547,7 @@ mod tests {
                 Box::new(Node::Num(4)),
             ])),
         ));
-        let b = block(vec![
-            if_stmt,
-        ]);
+        let b = block(vec![if_stmt]);
         let expe = Box::new(Node::DefFun("f".to_string(), b, 16));
         let calc = parser.parse_deffun().unwrap();
         assert_eq!(expe, calc);
