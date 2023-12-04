@@ -1,5 +1,5 @@
 // test array
-main() {
+int main() {
   int a;
   int xs[10]; // array with 10 element
   int b;

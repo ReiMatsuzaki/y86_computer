@@ -56,6 +56,42 @@ impl Parser {
         }
     }
 
+    fn expect_type(&mut self) -> Option<Type> {
+        // FIXME: return Result type
+        match self.tokens[self.pos] {
+            Token::Int => {
+                self.pos += 1;
+                if let Some(Token::Op('*')) = self.tokens.get(self.pos) {
+                    self.pos += 1;
+                    Some(Type::Ptr)
+                } else {
+                    Some(Type::Int)
+                }
+            }
+            _ => None
+        }
+    }
+
+    fn expect_id(&mut self) -> Option<String> {
+        match self.tokens[self.pos] {
+            Token::Id(ref s) => {
+                self.pos += 1;
+                Some(s.to_string())
+            }
+            _ => None
+        }
+    }
+
+    fn expect_num(&mut self) -> Option<u64> {
+        match self.tokens[self.pos] {
+            Token::Num(i) => {
+                self.pos += 1;
+                Some(i)
+            }
+            _ => None
+        }        
+    }
+
     fn parse_prog(&mut self) -> Prog {
         let mut stmts = vec![];
         while self.pos < self.tokens.len() {
@@ -99,6 +135,7 @@ impl Parser {
     }
 
     fn parse_deffun(&mut self) -> Box<Node> {
+        self.expect(&Token::Int);
         match self.tokens.get(self.pos) {
             Some(Token::Id(id)) => {
                 let name = String::from(id);
@@ -142,45 +179,23 @@ impl Parser {
 
     fn parse_defvar(&mut self) {
         self.lvars = vec![];
-        while let Some(&token) = self.tokens.get(self.pos).as_ref() {
-            match token {
-                Token::Int => {
+        while let Some(ty) = self.expect_type() {
+            let id = self.expect_id().unwrap();
+            match self.tokens.get(self.pos) {
+                Some(Token::Op(';')) => {
                     self.pos += 1;
-                    let ty = if let Some(Token::Op('*')) = self.tokens.get(self.pos) {
-                        self.pos += 1;
-                        Type::Ptr
-                    } else {
-                        Type::Int
-                    };
-
-                    if let Some(Token::Id(id)) = self.tokens.get(self.pos) {
-                        self.pos += 1;
-                        match self.tokens.get(self.pos) {
-                            Some(Token::Op(';')) => {
-                                self.pos += 1;
-                                self.add_lvars(id.to_string(), ty);
-                            }
-                            Some(Token::Op('[')) => {
-                                self.pos += 1;
-                                // FIXME: refactor self.expect_num()
-                                let n = match self.tokens[self.pos] {
-                                    Token::Num(n) => n,
-                                    _ => panic!("unexpected token in defvar. token={:?}", self.tokens[self.pos]),
-                                };
-                                self.pos += 1;
-                                let id = id.to_string();
-                                self.expect(&Token::Op(']'));
-                                self.expect(&Token::Op(';'));
-                                let ty = Type::Ary(Box::new(ty), n as usize);
-                                self.add_lvars(id.to_string(), ty);
-                            }
-                            _ => panic!("unexpected token in defvar. token={:?}", self.tokens[self.pos]),
-                        }
-                    } else {
-                        panic!("unexpected token in defvar")
-                    }
+                    self.add_lvars(id.to_string(), ty);
                 }
-                _ => break,
+                Some(Token::Op('[')) => {
+                    self.pos += 1;
+                    // FIXME: refactor self.expect_num()
+                    let n = self.expect_num().unwrap();
+                    self.expect(&Token::Op(']'));
+                    self.expect(&Token::Op(';'));
+                    let ty = Type::Ary(Box::new(ty), n as usize);
+                    self.add_lvars(id.to_string(), ty);
+                }
+                _ => panic!("unexpected token in defvar. token={:?}", self.tokens[self.pos]),
             }
         }
     }
@@ -454,6 +469,7 @@ mod tests {
     #[test]
     fn test_parse_stmt_if() {
         let tokens = vec![
+            Token::Int,
             Token::Id(String::from("f")),
             Token::Op('('),
             Token::Op(')'),
@@ -502,6 +518,7 @@ mod tests {
     #[test]
     fn test_parse_stmt_block() {
         let tokens = vec![
+            Token::Int,
             Token::Id(String::from("f")),
             Token::Op('('),
             Token::Op(')'),
@@ -549,6 +566,7 @@ mod tests {
     #[test]
     fn test_parse_def() {
         let tokens = vec![
+            Token::Int,
             Token::Id(String::from("f")),
             Token::Op('('),
             Token::Id(String::from("a")),
@@ -599,6 +617,7 @@ mod tests {
     #[test]
     fn test_array() {
         let tokens = vec![
+            Token::Int,
             Token::Id(String::from("f")),
             Token::Op('('),
             Token::Op(')'),

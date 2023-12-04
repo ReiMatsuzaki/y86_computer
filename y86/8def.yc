@@ -1,11 +1,11 @@
-calc(x, y) {
+int calc(x, y) {
   int a;
   int b;
   a = x + y;
   b = x * y;
   return b - a;
 }
-main() {
+int main() {
   int a;
   int b;
   int c;

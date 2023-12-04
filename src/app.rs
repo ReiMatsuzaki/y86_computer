@@ -9,7 +9,7 @@ pub fn run(
     wrange: Option<(usize, usize)>,
 ) -> u64 {
     let contents = if !contents.contains("main") {
-        String::from("main() {\n int a;\n int b;\n int c;\n") + &contents + "\n}"
+        String::from("int main() {\n int a;\n int b;\n int c;\n") + &contents + "\n}"
     } else {
         String::from(contents)
     };
