@@ -39,7 +39,6 @@ impl Coder {
     fn code_stmt(&mut self, node: &Node) -> Vec<Statement> {
         // parse node as stmt. number of stack is presevered. exception is ret.
         match node {
-            Node::DefVar => vec![],
             Node::DefFun(name, block, lvars_size) => {
                 let mut codes = vec![
                     // stack = .. .. .. .. RE (RE is return addressed)
@@ -245,7 +244,6 @@ impl Coder {
                 codes
             }
             Node::UnaryOp(UnaryOp::Deref, expr) => {
-                // FIXME: same as Variable and AryElem
                 // assume expr is Variable and push its value (address of something)
                 let mut codes = self.code_expr(expr);
                 codes.push(Statement::Popq(Register::RAX));

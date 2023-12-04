@@ -41,7 +41,6 @@ pub enum Node {
     Block(Vec<Box<Node>>),
     If(Box<Node>, Box<Node>), // cond, then
     While(Box<Node>, Box<Node>), // cond, body
-    DefVar,
     DefFun(String, Box<Node>, usize), // name, block, lvars_bytes
     Call(String, Vec<Box<Node>>),     // name, args(each Node is Expr)
     Ret(Box<Node>), // return expr
