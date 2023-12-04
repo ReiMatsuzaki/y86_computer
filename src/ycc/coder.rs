@@ -1,15 +1,14 @@
-
 use super::{node::*, INIT_SP};
 
 use crate::yas::{Dest, Imm, ModDest, Register, Statement};
 
 pub struct Coder {
-    label_count: u64
+    label_count: u64,
 }
 
 impl Coder {
     pub fn new() -> Self {
-        Coder { label_count: 0}
+        Coder { label_count: 0 }
     }
 
     pub fn code(&mut self, prog: &Prog) -> Vec<Statement> {
@@ -134,7 +133,7 @@ impl Coder {
 
     fn code_lincomb(&self, x: u64, y: u64, plus_minus: char) -> Vec<Statement> {
         // calculate x * %rax + y * %rbx and store to %rax
-        // assume %rax and %rbx are 
+        // assume %rax and %rbx are
         let mut xs = vec![];
         if x != 1 {
             xs.append(&mut vec![
@@ -151,8 +150,8 @@ impl Coder {
         match plus_minus {
             '+' => xs.append(&mut vec![Statement::Addq(Register::RBX, Register::RAX)]),
             '-' => xs.append(&mut vec![Statement::Subq(Register::RBX, Register::RAX)]),
-            _ => panic!("unexpected plus_minus")
-        }  
+            _ => panic!("unexpected plus_minus"),
+        }
         xs
     }
 
@@ -176,20 +175,20 @@ impl Coder {
                 ]);
                 codes
             }
-            Node::BinaryOp(op, left, right) => {      
+            Node::BinaryOp(op, left, right) => {
                 let mut codes = self.code_expr(left);
                 codes.append(&mut self.code_expr(right));
                 codes.push(Statement::Popq(Register::RBX));
                 codes.push(Statement::Popq(Register::RAX)); // %rax OP %rbx
                 let mut ss = match op {
                     BinaryOp::Add => {
-                        let x = if Self::is_pointer(right) {8} else {1};
-                        let y = if Self::is_pointer(left) {8} else {1};
+                        let x = if Self::is_pointer(right) { 8 } else { 1 };
+                        let y = if Self::is_pointer(left) { 8 } else { 1 };
                         self.code_lincomb(x, y, '+')
                     }
                     BinaryOp::Sub => {
-                        let x = if Self::is_pointer(right) {8} else {1};
-                        let y = if Self::is_pointer(left) {8} else {1};
+                        let x = if Self::is_pointer(right) { 8 } else { 1 };
+                        let y = if Self::is_pointer(left) { 8 } else { 1 };
                         self.code_lincomb(x, y, '-')
                     }
                     BinaryOp::Mul => vec![Statement::Mulq(Register::RBX, Register::RAX)],
@@ -232,7 +231,7 @@ impl Coder {
                     Statement::Pushq(Register::RBX),
                 ]
             }
-            Node::Variable(_, _) => {
+            Node::Variable(_, _) | Node::AryElem(_, _, _) => {
                 let mut codes = self.code_lvar(node);
                 codes.push(Statement::Popq(Register::RAX));
                 codes.push(Statement::Mrmovq(
@@ -246,6 +245,7 @@ impl Coder {
                 codes
             }
             Node::UnaryOp(UnaryOp::Deref, expr) => {
+                // FIXME: same as Variable and AryElem
                 // assume expr is Variable and push its value (address of something)
                 let mut codes = self.code_expr(expr);
                 codes.push(Statement::Popq(Register::RAX));
@@ -308,6 +308,21 @@ impl Coder {
                     Statement::Pushq(Register::RBX),
                 ]
             }
+            Node::AryElem(ty, offset, index) => {
+                // FIXME: impl as a[index] -> *(a + index)
+                let mut codes = self.code_expr(index);
+                let var = Box::new(Node::Variable(ty.clone(), *offset));
+                codes.append(&mut self.code_lvar(&var));
+                codes.append(&mut vec![
+                    Statement::Popq(Register::RAX), // %rax: address of a[0]
+                    Statement::Popq(Register::RBX), // %rbx: index
+                    Statement::Irmovq(Imm::Integer(ty.size() as u64), Register::RCX),
+                    Statement::Mulq(Register::RCX, Register::RBX),
+                    Statement::Subq(Register::RBX, Register::RAX),
+                    Statement::Pushq(Register::RAX),
+                ]);
+                codes
+            }
             _ => panic!("unexpected node in code_lvar"),
         }
     }
@@ -315,8 +330,8 @@ impl Coder {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::node::test_utils::*;
+    use super::*;
     use crate::yas::{Imm, Register, Statement};
 
     #[test]

@@ -72,7 +72,7 @@ impl Parser {
         if self.lvars.iter().any(|v| v.name.eq(&id)) {
             panic!("variable already defined");
         }
-        let offset = -8 * (1 + self.lvars.len() as i64);
+        let offset = -8-self.lvars.iter().map(|v| v.ty.size() as i64).sum::<i64>();
         let v = Variable {
             name: id.to_string(),
             offset,
@@ -198,9 +198,10 @@ impl Parser {
                         }
                         Some(Token::Op('[')) => {
                             self.pos += 1;
+                            // FIXME: refactor self.expect_num()
                             let n = match self.tokens[self.pos] {
                                 Token::Num(n) => n,
-                                _ => panic!("unexpected token in defvar"),
+                                _ => panic!("unexpected token in defvar. token={:?}", self.tokens[self.pos]),
                             };
                             self.pos += 1;
                             let id = id.to_string();
@@ -210,7 +211,7 @@ impl Parser {
                             self.add_lvars(id.to_string(), ty);
                             Box::new(Node::DefVar)
                         }
-                        _ => panic!("unexpected token in defvar"),
+                        _ => panic!("unexpected token in defvar. token={:?}", self.tokens[self.pos]),
                     }
                 } else {
                     panic!("unexpected token in defvar")

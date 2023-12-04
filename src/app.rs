@@ -145,4 +145,10 @@ mod tests {
         let filename = "y86/9pointer.yc";
         assert_eq!(0x5, run_file(filename));
     }
+
+    #[test]
+    fn test_array() {
+        let filename = "y86/10array.yc";
+        assert_eq!(0x7, run_file(filename));
+    }
 }

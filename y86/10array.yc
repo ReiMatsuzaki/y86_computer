@@ -1,0 +1,11 @@
+main() {
+  int a;
+  int xs[10];
+  int b;
+
+  a = 2;
+  b = 5;
+  xs[2] = a;
+  xs[3] = xs[2] + b;
+  return xs[3];
+}

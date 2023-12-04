@@ -47,3 +47,7 @@ ycc8: ${BIN} ./y86/8def.yc
 ycc9: ${BIN} ./y86/9pointer.yc
 		@echo "test pointer. expect 5"
 		${BIN} run ./y86/9pointer.yc --log-level 0
+
+ycc10: ${BIN} ./y86/10array.yc
+		@echo "test pointer. expect 7"
+		${BIN} run ./y86/10array.yc --log-level 0
