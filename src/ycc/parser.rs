@@ -1,3 +1,7 @@
+// q: change function result type to Result<T, E>
+// a:
+
+
 // program = def
 // def     = name "(" (ident ("," ident)*)? ")" "{" stmt* "}"
 // stmt    = expr ";" |
@@ -30,6 +34,12 @@ struct Variable {
     ty: Type,
 }
 
+#[derive(Debug)]
+pub struct ParserError {
+    pub token: Token,
+    pub message: String,
+}
+
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser {
@@ -40,76 +50,85 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Prog {
+    pub fn parse(&mut self) -> Result<Prog, ParserError> {
         self.parse_prog()
     }
 
-    fn expect(&mut self, token: &Token) -> &mut Self {
+    fn expect(&mut self, token: &Token) -> Result<(), ParserError> {
         if self.tokens[self.pos] == *token {
             self.pos += 1;
-            self
+            Ok(())
         } else {
-            panic!(
-                "expected {:?}, but found {:?}. pos={2}",
-                token, self.tokens[self.pos], self.pos
-            );
+            Err(ParserError {
+                token: self.tokens[self.pos].clone(),
+                message: "unexpected token.".to_string(),
+            })
         }
     }
 
-    fn expect_type(&mut self) -> Option<Type> {
+    fn expect_type(&mut self) -> Result<Type, ParserError> {
         // FIXME: return Result type
         match self.tokens[self.pos] {
             Token::Int => {
                 self.pos += 1;
                 if let Some(Token::Op('*')) = self.tokens.get(self.pos) {
                     self.pos += 1;
-                    Some(Type::Ptr)
+                    Ok(Type::Ptr)
                 } else {
-                    Some(Type::Int)
+                    Ok(Type::Int)
                 }
             }
-            _ => None
+            _ => Err(ParserError {
+                token: self.tokens[self.pos].clone(),
+                message: "type is expected".to_string(),
+            })
         }
     }
 
-    fn expect_id(&mut self) -> Option<String> {
+    fn expect_id(&mut self) -> Result<String, ParserError> {
         match self.tokens[self.pos] {
             Token::Id(ref s) => {
                 self.pos += 1;
-                Some(s.to_string())
+                Ok(s.to_string())
             }
-            _ => None
+            _ => Err(ParserError {
+                token: self.tokens[self.pos].clone(),
+                message: "Ident is expected".to_string(),
+            })
         }
     }
 
-    fn expect_num(&mut self) -> Option<u64> {
+    fn expect_num(&mut self) -> Result<u64, ParserError> {
         match self.tokens[self.pos] {
             Token::Num(i) => {
                 self.pos += 1;
-                Some(i)
+                Ok(i)
             }
-            _ => None
+            _ => Err(ParserError {
+                token: self.tokens[self.pos].clone(),
+                message: "Num is expected".to_string(),
+            })
         }        
     }
 
-    fn parse_prog(&mut self) -> Prog {
+    fn parse_prog(&mut self) -> Result<Prog, ParserError> {
         let mut stmts = vec![];
         while self.pos < self.tokens.len() {
-            stmts.push(self.parse_deffun());
+            stmts.push(self.parse_deffun()?);
         }
         let node = Box::new(Node::Block(stmts));
-        Prog::new(node)
+        Ok(Prog::new(node))
     }
 
-    fn parse_deffun(&mut self) -> Box<Node> {
-        self.expect(&Token::Int);
+    fn parse_deffun(&mut self) -> Result<Box<Node>, ParserError> {
+        self.expect(&Token::Int)?;
         match self.tokens.get(self.pos) {
             Some(Token::Id(id)) => {
                 let name = String::from(id);
                 self.pos += 1;
-                self.parse_argvar();
-                self.expect(&Token::Op('{'));
-                self.parse_defvar();
+                self.parse_argvar()?;
+                self.expect(&Token::Op('{'))?;
+                self.parse_defvar()?;
                 let mut block = vec![];
                 while let Some(&token) = self.tokens.get(self.pos).as_ref() {
                     match token {
@@ -119,30 +138,29 @@ impl Parser {
                         }
                         _ => {
                             let n = self.parse_stmt();
-                            block.push(n);
+                            block.push(n?);
                         }
                     }
                 }
                 let block = Box::new(Node::Block(block));
                 let lvar_bytes = self.lvars.iter().map(|v| v.ty.size()).sum();
-                Box::new(Node::DefFun(name, block, lvar_bytes))
+                Ok(Box::new(Node::DefFun(name, block, lvar_bytes)))
             }
             Some(_) => panic!("invalid token, pos={0}", self.pos),
             None => panic!("token not found. pos={}", self.pos),
         }
     }
 
-    fn parse_argvar(&mut self) {
-        self.expect(&Token::Op('('));
+    fn parse_argvar(&mut self) -> Result<(), ParserError>{
+        self.expect(&Token::Op('('))?;
         self.args = vec![];
         while let Some(token) = self.tokens.get(self.pos) {
             if Token::Op(')') == *token {
                 self.pos += 1;
                 break;
             }
-            let token = 1; // FIXME: remove
-            let ty = self.expect_type().unwrap();
-            let name = self.expect_id().unwrap();
+            let ty = self.expect_type()?;
+            let name = self.expect_id()?;
             let offset = 16 + self.args.iter().map(|v| v.ty.size() as i64).sum::<i64>();
             self.args.push(Variable {
                 name,
@@ -157,39 +175,48 @@ impl Parser {
                 Some(Token::Op(',')) => {
                     self.pos += 1;
                 }
-                _ => {
-                    panic!("unexpected token in function def: {:?}", token)
-                }
+                _ => return Err(ParserError {
+                    token: self.tokens[self.pos].clone(),
+                    message: "Num is expected".to_string(),
+                })
             }
         }
+        Ok(())
     }
 
-    fn parse_defvar(&mut self) {
+    fn parse_defvar(&mut self)  -> Result<(), ParserError> {
         self.lvars = vec![];
-        while let Some(ty) = self.expect_type() {
-            let id = self.expect_id().unwrap();
+        while let Ok(ty) = self.expect_type() {
+            let id = self.expect_id()?;
             match self.tokens.get(self.pos) {
                 Some(Token::Op(';')) => {
                     self.pos += 1;
-                    self.add_lvars(id.to_string(), ty);
+                    self.add_lvars(id.to_string(), ty)?;
                 }
                 Some(Token::Op('[')) => {
                     self.pos += 1;
                     // FIXME: refactor self.expect_num()
-                    let n = self.expect_num().unwrap();
-                    self.expect(&Token::Op(']'));
-                    self.expect(&Token::Op(';'));
+                    let n = self.expect_num()?;
+                    self.expect(&Token::Op(']'))?;
+                    self.expect(&Token::Op(';'))?;
                     let ty = Type::Ary(Box::new(ty), n as usize);
-                    self.add_lvars(id.to_string(), ty);
+                    self.add_lvars(id.to_string(), ty)?;
                 }
-                _ => panic!("unexpected token in defvar. token={:?}", self.tokens[self.pos]),
-            }
+                _ => return Err(ParserError {
+                    token: self.tokens[self.pos].clone(),
+                    message: "unexpected token in defvar.".to_string(),
+                })
+                        }
         }
+        Ok(())
     }
 
-    fn add_lvars(&mut self, id: String, ty: Type) {
+    fn add_lvars(&mut self, id: String, ty: Type) -> Result<(), ParserError> {
         if self.lvars.iter().any(|v| v.name.eq(&id)) {
-            panic!("variable already defined");
+            return Err(ParserError {
+                token: self.tokens[self.pos].clone(),
+                message: "variable already defined".to_string(),
+            })
         }
         let offset = -8-self.lvars.iter().map(|v| v.ty.size() as i64).sum::<i64>();
         let v = Variable {
@@ -198,156 +225,157 @@ impl Parser {
             ty: ty.clone(),
         };
         self.lvars.push(v);
+        Ok(())
     }
 
-    fn parse_stmt(&mut self) -> Box<Node> {
+    fn parse_stmt(&mut self) -> Result<Box<Node>, ParserError> {
         match self.tokens.get(self.pos) {
             Some(Token::Op('{')) => {
                 self.pos += 1;
-                let mut stmts = vec![self.parse_stmt()];
+                let stmt = self.parse_stmt()?;
+                let mut stmts = vec![stmt];
                 while let Some(&token) = self.tokens.get(self.pos).as_ref() {
                     match token {
                         Token::Op('}') => {
                             self.pos += 1;
                             break;
                         }
-                        _ => stmts.push(self.parse_stmt()),
+                        _ => stmts.push(self.parse_stmt()?),
                     }
                 }
-                Box::new(Node::Block(stmts))
+                Ok(Box::new(Node::Block(stmts)))
             }
             Some(Token::Return) => {
                 self.pos += 1;
-                let expr = self.parse_expr();
-                self.expect(&Token::Op(';'));
-                Box::new(Node::Ret(expr))
+                let expr = self.parse_expr()?;
+                self.expect(&Token::Op(';'))?;
+                Ok(Box::new(Node::Ret(expr)))
             }
             Some(Token::While) => {
                 self.pos += 1;
-                self.expect(&Token::Op('('));
-                let expr = self.parse_expr();
-                self.expect(&Token::Op(')'));
-                let stmt = self.parse_stmt();
-                Box::new(Node::While(expr, stmt))
+                self.expect(&Token::Op('('))?;
+                let expr = self.parse_expr()?;
+                self.expect(&Token::Op(')'))?;
+                let stmt = self.parse_stmt()?;
+                Ok(Box::new(Node::While(expr, stmt)))
             }
             Some(Token::If) => {
                 self.pos += 1;
-                self.expect(&Token::Op('('));
-                let expr = self.parse_expr();
-                self.expect(&Token::Op(')'));
-                let stmt = self.parse_stmt();
-                Box::new(Node::If(expr, stmt))
+                self.expect(&Token::Op('('))?;
+                let expr = self.parse_expr()?;
+                self.expect(&Token::Op(')'))?;
+                let stmt = self.parse_stmt()?;
+                Ok(Box::new(Node::If(expr, stmt)))
             }
-
             _ => {
-                let expr = self.parse_expr();
-                self.expect(&Token::Op(';'));
-                expr
+                let expr = self.parse_expr()?;
+                self.expect(&Token::Op(';'))?;
+                Ok(expr)
             }
         }
     }
 
-    fn parse_expr(&mut self) -> Box<Node> {
+    fn parse_expr(&mut self) -> Result<Box<Node>, ParserError> {
         self.parse_assign()
     }
 
-    fn parse_assign(&mut self) -> Box<Node> {
-        let left = self.parse_rel();
+    fn parse_assign(&mut self) -> Result<Box<Node>, ParserError> {
+        let left = self.parse_rel()?;
         if let Some(&Token::Op('=')) = self.tokens.get(self.pos) {
             self.pos += 1;
-            let right = self.parse_rel();
-            Box::new(Node::BinaryOp(BinaryOp::Assign, left, right))
+            let right = self.parse_rel()?;
+            Ok(Box::new(Node::BinaryOp(BinaryOp::Assign, left, right)))
         } else {
-            left
+            Ok(left)
         }
     }
 
-    fn parse_rel(&mut self) -> Box<Node> {
-        let mut left = self.parse_add();
+    fn parse_rel(&mut self) -> Result<Box<Node>, ParserError> {
+        let mut left = self.parse_add()?;
         while let Some(&token) = self.tokens.get(self.pos).as_ref() {
             match token {
                 Token::Op2(['=', '=']) => {
                     self.pos += 1;
-                    let right = self.parse_add();
+                    let right = self.parse_add()?;
                     left = Box::new(Node::BinaryOp(BinaryOp::Eq, left, right));
                 }
                 Token::Op('<') => {
                     self.pos += 1;
-                    let right = self.parse_add();
+                    let right = self.parse_add()?;
                     left = Box::new(Node::BinaryOp(BinaryOp::Less, left, right));
                 }
                 _ => break,
             }
         }
-        left
+        Ok(left)
     }
 
-    fn parse_add(&mut self) -> Box<Node> {
-        let mut left = self.parse_mul();
+    fn parse_add(&mut self) -> Result<Box<Node>, ParserError> {
+        let mut left = self.parse_mul()?;
         while let Some(&token) = self.tokens.get(self.pos).as_ref() {
             match token {
                 Token::Op('+') => {
                     self.pos += 1;
-                    let right = self.parse_mul();
+                    let right = self.parse_mul()?;
                     left = Box::new(Node::BinaryOp(BinaryOp::Add, left, right));
                 }
                 Token::Op('-') => {
                     self.pos += 1;
-                    let right = self.parse_mul();
+                    let right = self.parse_mul()?;
                     left = Box::new(Node::BinaryOp(BinaryOp::Sub, left, right));
                 }
                 _ => break,
             }
         }
-        left
+        Ok(left)
     }
 
-    fn parse_mul(&mut self) -> Box<Node> {
-        let mut left = self.parse_unary();
+    fn parse_mul(&mut self) -> Result<Box<Node>, ParserError> {
+        let mut left = self.parse_unary()?;
         while let Some(&token) = self.tokens.get(self.pos).as_ref() {
             match token {
                 Token::Op('*') => {
                     self.pos += 1;
-                    let right = self.parse_unary();
+                    let right = self.parse_unary()?;
                     left = Box::new(Node::BinaryOp(BinaryOp::Mul, left, right));
                 }
                 Token::Op('/') => {
                     self.pos += 1;
-                    let right = self.parse_unary();
+                    let right = self.parse_unary()?;
                     left = Box::new(Node::BinaryOp(BinaryOp::Div, left, right));
                 }
                 _ => break,
             }
         }
-        left
+        Ok(left)
     }
 
-    fn parse_unary(&mut self) -> Box<Node> {
+    fn parse_unary(&mut self) -> Result<Box<Node>, ParserError> {
         match self.tokens.get(self.pos) {
             Some(Token::Op('-')) => {
                 self.pos += 1;
-                let primary = self.parse_primary();
-                Box::new(Node::UnaryOp(UnaryOp::Neg, primary))
+                let primary = self.parse_primary()?;
+                Ok(Box::new(Node::UnaryOp(UnaryOp::Neg, primary)))
             }
             Some(Token::Op('*')) => {
                 self.pos += 1;
-                let primary = self.parse_primary();
-                Box::new(Node::UnaryOp(UnaryOp::Deref, primary))
+                let primary = self.parse_primary()?;
+                Ok(Box::new(Node::UnaryOp(UnaryOp::Deref, primary)))
             }
             Some(Token::Op('&')) => {
                 self.pos += 1;
-                let primary = self.parse_primary();
-                Box::new(Node::UnaryOp(UnaryOp::Addr, primary))
+                let primary = self.parse_primary()?;
+                Ok(Box::new(Node::UnaryOp(UnaryOp::Addr, primary)))
             }
             _ => self.parse_primary(),
         }
     }
 
-    fn parse_primary(&mut self) -> Box<Node> {
+    fn parse_primary(&mut self) -> Result<Box<Node>, ParserError> {
         match self.tokens.get(self.pos) {
             Some(Token::Num(n)) => {
                 self.pos += 1;
-                Box::new(Node::Num(*n))
+                Ok(Box::new(Node::Num(*n)))
             }
             Some(Token::Id(id)) => {
                 self.pos += 1;
@@ -356,18 +384,17 @@ impl Parser {
                     Some(Token::Op('[')) => {
                         // array access
                         self.pos += 1;
-                        let (ty, offset) = match *self.find_var(&id) {
-                            Node::Variable(ty, offset) => {
-                                match ty {
-                                    Type::Ary(ty, _) => (*ty, offset),
-                                    _ => panic!("unexpected type in array access"),
-                                }
-                            }
-                            _ => panic!("unexpected node in array access"),
-                        };
-                        let index = self.parse_expr();
-                        self.expect(&Token::Op(']'));
-                        Box::new(Node::AryElem(ty, offset, index))
+                        let v = *self.find_var(&id)?;
+                        let (ty, offset) = match v {
+                            Node::Variable(Type::Ary(ty, _), offset) => (*ty, offset),
+                            _ => return Err(ParserError {
+                                            token: self.tokens[self.pos].clone(),
+                                            message: "unexpected type in array access".to_string(),
+                                        }),
+                                    };
+                        let index = self.parse_expr()?;
+                        self.expect(&Token::Op(']'))?;
+                        Ok(Box::new(Node::AryElem(ty, offset, index)))
                     }
                     Some(Token::Op('(')) => {
                         // function call
@@ -382,24 +409,19 @@ impl Parser {
                                 Token::Op(',') => {
                                     self.pos += 1;
                                 }
-                                _ => args.push(self.parse_expr()),
+                                _ => args.push(self.parse_expr()?),
                             }
                         }
-                        Box::new(Node::Call(name, args))
+                        Ok(Box::new(Node::Call(name, args)))
                     }
                     _ => self.find_var(&id),
                 }
             }
             Some(Token::Op('(')) => {
                 self.pos += 1;
-                let expr = self.parse_expr();
-                match self.tokens.get(self.pos) {
-                    Some(Token::Op(')')) => {
-                        self.pos += 1;
-                        expr
-                    }
-                    _ => panic!("expected token ')'. but found {:?}", self.tokens[self.pos]),
-                }
+                let expr = self.parse_expr()?;
+                self.expect(&Token::Op(')'))?;
+                Ok(expr)
             }
             _ => panic!(
                 "unexpected token in primary: {:?}, pos={1}",
@@ -408,7 +430,7 @@ impl Parser {
         }
     }
 
-    fn find_var(&self, id: &str) -> Box<Node> {
+    fn find_var(&self, id: &str) -> Result<Box<Node>, ParserError> {
         // variable
         //                      +-(RBP)
         // stack = .. L2 L1 L0 OB RE A0 A1 A2 ..
@@ -417,9 +439,12 @@ impl Parser {
         let v = match (argi, lvari) {
             (Some(i), None) => i,
             (None, Some(i)) => i,
-            _ => panic!("lvar not found. name={}. pos={}", id, self.pos),
+            _ => return Err(ParserError {
+                token: self.tokens[self.pos].clone(),
+                message: "lvar not found.".to_string(),
+            })
         };
-        Box::new(Node::Variable(v.ty.clone(), v.offset))
+        Ok(Box::new(Node::Variable(v.ty.clone(), v.offset)))
     }
 }
 
@@ -449,7 +474,7 @@ mod tests {
         let m_4_5 = div(num(4), num(5));
         let expe = sub(add(m_1, m_2_3), m_4_5);
         // let expe = Prog{node: block(vec![expe])};
-        let calc = parser.parse_expr();
+        let calc = parser.parse_expr().unwrap();
         assert_eq!(expe, calc);
     }
 
@@ -498,7 +523,7 @@ mod tests {
             if_stmt,
         ]);
         let expe = Box::new(Node::DefFun("f".to_string(), expe, 16));
-        let calc = parser.parse_deffun();
+        let calc = parser.parse_deffun().unwrap();
         assert_eq!(expe, calc);
     }
 
@@ -546,7 +571,7 @@ mod tests {
             if_stmt,
         ]);
         let expe = Box::new(Node::DefFun("f".to_string(), b, 16));
-        let calc = parser.parse_deffun();
+        let calc = parser.parse_deffun().unwrap();
         assert_eq!(expe, calc);
     }
 
@@ -598,7 +623,7 @@ mod tests {
             ]),
             16,
         ))]));
-        let calc = parser.parse_prog();
+        let calc = parser.parse_prog().unwrap();
         assert_eq!(expe, calc);
     }
 
@@ -631,7 +656,7 @@ mod tests {
             block(vec![aryelm]),
             8 * 10,
         ))]));
-        let calc = parser.parse_prog();
+        let calc = parser.parse_prog().unwrap();
         assert_eq!(expe, calc);
     }
 }

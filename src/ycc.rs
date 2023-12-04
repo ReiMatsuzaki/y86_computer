@@ -16,7 +16,13 @@ pub fn scompile(src: &str, verbose: i64) -> Vec<Code> {
     }
 
     let mut parser = parser::Parser::new(tokens);
-    let prog = parser.parse();
+    let prog = match parser.parse() {
+        Ok(p) => p,
+        Err(e) => {
+            panic!("parse error\ntoken={0:?}\n\nmsg={1}", e.token, e.message)
+        }
+    };
+    // FIXME:: print error message
     if verbose >= 1 {
         prog.display();
     }
