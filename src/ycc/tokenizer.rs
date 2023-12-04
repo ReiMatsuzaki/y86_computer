@@ -14,8 +14,22 @@ pub fn tokenize(src: &str) -> Vec<Token> {
                     tokens.push(Token::Op('='));
                 }
             }
-            '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | ';' | '{' | '}' | ',' | '&' | '[' | ']' => {
+            '+' | '-' | '*' | '(' | ')' | '<' | '>' | ';' | '{' | '}' | ',' | '&' | '[' | ']' => {
                 tokens.push(Token::Op(c));
+            }
+            '/' => {
+                if let Some('/') = chars.peek() {
+                    while let Some(&c) = chars.peek() {
+                        match c {
+                            '\n' => break,
+                            _ => {
+                                chars.next();
+                            }
+                        }
+                    }
+                } else {
+                    tokens.push(Token::Op('/'));
+                }
             }
             '0'..='9' => {
                 let mut num = String::new();

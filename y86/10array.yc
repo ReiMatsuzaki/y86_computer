@@ -1,6 +1,7 @@
+// test array
 main() {
   int a;
-  int xs[10];
+  int xs[10]; // array with 10 element
   int b;
 
   a = 2;
