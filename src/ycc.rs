@@ -5,11 +5,11 @@ mod tokenizer;
 mod parser;
 mod coder;
 
-use crate::yas::Statement;
+use crate::yas::Code;
 
 pub const INIT_SP: u64 = 2816; // initial stack pointer
 
-pub fn scompile(src: &str, verbose: i64) -> Vec<Statement> {
+pub fn scompile(src: &str, verbose: i64) -> Vec<Code> {
     let tokens = tokenizer::tokenize(src);
     if verbose >= 1 {
         println!("tokens: {:?}", tokens)

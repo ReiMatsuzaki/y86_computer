@@ -135,7 +135,7 @@ impl FromStr for ModDest {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Statement {
+pub enum Code {
     Label(String),
     Halt,
     Nop,
@@ -163,13 +163,13 @@ pub enum Statement {
     Popq(Register),
 }
 
-fn parse_statement(input: &str) -> Result<Statement, String> {
+fn parse_statement(input: &str) -> Result<Code, String> {
     let input = match input.find("//") {
         Some(i) => input[..i].trim(),
         None => input.trim(),
     };
     match input.find(":") {
-        Some(i) => Ok(Statement::Label(input[..i].to_string())),
+        Some(i) => Ok(Code::Label(input[..i].to_string())),
         None => parse_instrument(input),
     }
 }
@@ -192,34 +192,34 @@ fn split_instrument(input: &str) -> Vec<&str> {
     }
 }
 
-fn parse_instrument(input: &str) -> Result<Statement, String> {
+fn parse_instrument(input: &str) -> Result<Code, String> {
     let parts: Vec<&str> = split_instrument(input);
     match parts.as_slice() {
-        ["halt"] => Ok(Statement::Halt),
-        ["nop"] => Ok(Statement::Nop),
-        ["rrmovq", ra, rb] => Ok(Statement::Rrmovq(ra.parse()?, rb.parse()?)),
-        ["irmovq", v, rb] => Ok(Statement::Irmovq(v.parse()?, rb.parse()?)),
-        ["rmmovq", ra, m] => Ok(Statement::Rmmovq(ra.parse()?, m.parse()?)),
-        ["mrmovq", m, ra] => Ok(Statement::Mrmovq(m.parse()?, ra.parse()?)),
-        ["addq", ra, rb] => Ok(Statement::Addq(ra.parse()?, rb.parse()?)),
-        ["subq", ra, rb] => Ok(Statement::Subq(ra.parse()?, rb.parse()?)),
-        ["andq", ra, rb] => Ok(Statement::Andq(ra.parse()?, rb.parse()?)),
-        ["orq", ra, rb] => Ok(Statement::Orq(ra.parse()?, rb.parse()?)),
-        ["mulq", ra, rb] => Ok(Statement::Mulq(ra.parse()?, rb.parse()?)),
-        ["divq", ra, rb] => Ok(Statement::Divq(ra.parse()?, rb.parse()?)),
-        ["je", m] => Ok(Statement::Je(m.parse()?)),
-        ["jne", m] => Ok(Statement::Jne(m.parse()?)),
-        ["cmove", ra, rb] => Ok(Statement::Cmove(ra.parse()?, rb.parse()?)),
-        ["cmovne", ra, rb] => Ok(Statement::Cmovne(ra.parse()?, rb.parse()?)),
-        ["call", m] => Ok(Statement::Call(m.parse()?)),
-        ["ret"] => Ok(Statement::Ret),
-        ["pushq", ra] => Ok(Statement::Pushq(ra.parse()?)),
-        ["popq", ra] => Ok(Statement::Popq(ra.parse()?)),
+        ["halt"] => Ok(Code::Halt),
+        ["nop"] => Ok(Code::Nop),
+        ["rrmovq", ra, rb] => Ok(Code::Rrmovq(ra.parse()?, rb.parse()?)),
+        ["irmovq", v, rb] => Ok(Code::Irmovq(v.parse()?, rb.parse()?)),
+        ["rmmovq", ra, m] => Ok(Code::Rmmovq(ra.parse()?, m.parse()?)),
+        ["mrmovq", m, ra] => Ok(Code::Mrmovq(m.parse()?, ra.parse()?)),
+        ["addq", ra, rb] => Ok(Code::Addq(ra.parse()?, rb.parse()?)),
+        ["subq", ra, rb] => Ok(Code::Subq(ra.parse()?, rb.parse()?)),
+        ["andq", ra, rb] => Ok(Code::Andq(ra.parse()?, rb.parse()?)),
+        ["orq", ra, rb] => Ok(Code::Orq(ra.parse()?, rb.parse()?)),
+        ["mulq", ra, rb] => Ok(Code::Mulq(ra.parse()?, rb.parse()?)),
+        ["divq", ra, rb] => Ok(Code::Divq(ra.parse()?, rb.parse()?)),
+        ["je", m] => Ok(Code::Je(m.parse()?)),
+        ["jne", m] => Ok(Code::Jne(m.parse()?)),
+        ["cmove", ra, rb] => Ok(Code::Cmove(ra.parse()?, rb.parse()?)),
+        ["cmovne", ra, rb] => Ok(Code::Cmovne(ra.parse()?, rb.parse()?)),
+        ["call", m] => Ok(Code::Call(m.parse()?)),
+        ["ret"] => Ok(Code::Ret),
+        ["pushq", ra] => Ok(Code::Pushq(ra.parse()?)),
+        ["popq", ra] => Ok(Code::Popq(ra.parse()?)),
         _ => Err(format!("statement parts mismatched: {0:?}", parts.as_slice())),
     }
 }
 
-pub fn parse_body(body: &str) -> Result<Vec<Statement>, String> {
+pub fn parse_body(body: &str) -> Result<Vec<Code>, String> {
     let mut statements = Vec::new();
     for line in body.lines() {
         if !line.is_empty() {
@@ -229,46 +229,46 @@ pub fn parse_body(body: &str) -> Result<Vec<Statement>, String> {
     Ok(statements)
 }
 
-fn byte_length(statement: &Statement) -> u64 {
+fn byte_length(statement: &Code) -> u64 {
     match statement {
-        Statement::Label(_) => 0,
-        Statement::Halt => 1,
-        Statement::Nop => 1,
+        Code::Label(_) => 0,
+        Code::Halt => 1,
+        Code::Nop => 1,
 
-        Statement::Rrmovq(_, _) => 2,
-        Statement::Irmovq(_, _) => 10,
-        Statement::Rmmovq(_, _) => 10,
-        Statement::Mrmovq(_, _) => 10,
+        Code::Rrmovq(_, _) => 2,
+        Code::Irmovq(_, _) => 10,
+        Code::Rmmovq(_, _) => 10,
+        Code::Mrmovq(_, _) => 10,
 
-        Statement::Addq(_, _) => 2,
-        Statement::Subq(_, _) => 2,
-        Statement::Andq(_, _) => 2,
-        Statement::Orq(_, _) => 2,
-        Statement::Mulq(_, _) => 2,
-        Statement::Divq(_, _) => 2,        
+        Code::Addq(_, _) => 2,
+        Code::Subq(_, _) => 2,
+        Code::Andq(_, _) => 2,
+        Code::Orq(_, _) => 2,
+        Code::Mulq(_, _) => 2,
+        Code::Divq(_, _) => 2,        
 
-        Statement::Jmp(_) => 9,
+        Code::Jmp(_) => 9,
         // Statement::Jle(_) => 9,
         // Statement::Jl(_) => 9,
-        Statement::Je(_) => 9,
-        Statement::Jne(_) => 9,
+        Code::Je(_) => 9,
+        Code::Jne(_) => 9,
 
-        Statement::Cmovl(_, _) => 2,
-        Statement::Cmove(_, _) => 2,
-        Statement::Cmovne(_, _) => 2,
+        Code::Cmovl(_, _) => 2,
+        Code::Cmove(_, _) => 2,
+        Code::Cmovne(_, _) => 2,
 
-        Statement::Call(_) => 9,
-        Statement::Ret => 1,
-        Statement::Pushq(_) => 2,
-        Statement::Popq(_) => 2,
+        Code::Call(_) => 9,
+        Code::Ret => 1,
+        Code::Pushq(_) => 2,
+        Code::Popq(_) => 2,
     }
 }
 
-pub fn build_symbol_table(statements: &Vec<Statement>) -> HashMap<String, u64> {
+pub fn build_symbol_table(statements: &Vec<Code>) -> HashMap<String, u64> {
     let mut table = HashMap::new();
     let mut addr = 0;
     for statement in statements {
-        if let Statement::Label(s) = statement {
+        if let Code::Label(s) = statement {
             table.insert(s.to_string(), addr);
         }
         addr += byte_length(&statement);
@@ -327,7 +327,7 @@ fn ass_dest(d: &Dest, symbol_table: &HashMap<String, u64>) -> Result<[u8; 8], St
 }
 
 fn assemble_one(
-    statement: &Statement,
+    statement: &Code,
     symbol_table: &HashMap<String, u64>,
 ) -> Result<Vec<u8>, String> {
     fn f_v(head: u8, d: &Dest, symbol_table: &HashMap<String, u64>) -> Result<Vec<u8>, String> {
@@ -337,26 +337,26 @@ fn assemble_one(
         ])
     }
     match statement {
-        Statement::Label(_) => Result::Ok(Vec::new()),
-        Statement::Halt => Result::Ok(vec![0x00]),
-        Statement::Nop => Result::Ok(vec![0x10]),
+        Code::Label(_) => Result::Ok(Vec::new()),
+        Code::Halt => Result::Ok(vec![0x00]),
+        Code::Nop => Result::Ok(vec![0x10]),
 
-        Statement::Rrmovq(ra, rb) => Result::Ok(vec![0x20, ass_reg(Some(ra), Some(rb))]),
-        Statement::Irmovq(v, rb) => {
+        Code::Rrmovq(ra, rb) => Result::Ok(vec![0x20, ass_reg(Some(ra), Some(rb))]),
+        Code::Irmovq(v, rb) => {
             let r = ass_reg(None, Some(rb));
             let xs = ass_imm(v, symbol_table)?;
             Result::Ok(vec![
                 0x30, r, xs[0], xs[1], xs[2], xs[3], xs[4], xs[5], xs[6], xs[7],
             ])
         }
-        Statement::Rmmovq(ra, a) => {
+        Code::Rmmovq(ra, a) => {
             let r = ass_reg(Some(ra), Some(&a.register));
             let xs = ass_dest(&a.dest, symbol_table)?;
             Result::Ok(vec![
                 0x40, r, xs[0], xs[1], xs[2], xs[3], xs[4], xs[5], xs[6], xs[7],
             ])
         }
-        Statement::Mrmovq(a, ra) => {
+        Code::Mrmovq(a, ra) => {
             let r = ass_reg(Some(ra), Some(&a.register));
             let xs = ass_dest(&a.dest, symbol_table)?;
             Result::Ok(vec![
@@ -364,32 +364,32 @@ fn assemble_one(
             ])
         }
 
-        Statement::Addq(ra, rb) => Result::Ok(vec![0x60, ass_reg(Some(ra), Some(rb))]),
-        Statement::Subq(ra, rb) => Result::Ok(vec![0x61, ass_reg(Some(ra), Some(rb))]),
-        Statement::Andq(ra, rb) => Result::Ok(vec![0x62, ass_reg(Some(ra), Some(rb))]),
-        Statement::Orq(ra, rb) => Result::Ok(vec![0x63, ass_reg(Some(ra), Some(rb))]),
-        Statement::Mulq(ra, rb) => Result::Ok(vec![0x64, ass_reg(Some(ra), Some(rb))]),
-        Statement::Divq(ra, rb) => Result::Ok(vec![0x65, ass_reg(Some(ra), Some(rb))]),
+        Code::Addq(ra, rb) => Result::Ok(vec![0x60, ass_reg(Some(ra), Some(rb))]),
+        Code::Subq(ra, rb) => Result::Ok(vec![0x61, ass_reg(Some(ra), Some(rb))]),
+        Code::Andq(ra, rb) => Result::Ok(vec![0x62, ass_reg(Some(ra), Some(rb))]),
+        Code::Orq(ra, rb) => Result::Ok(vec![0x63, ass_reg(Some(ra), Some(rb))]),
+        Code::Mulq(ra, rb) => Result::Ok(vec![0x64, ass_reg(Some(ra), Some(rb))]),
+        Code::Divq(ra, rb) => Result::Ok(vec![0x65, ass_reg(Some(ra), Some(rb))]),
 
-        Statement::Jmp(d) => f_v(0x70, d, symbol_table),
+        Code::Jmp(d) => f_v(0x70, d, symbol_table),
         // Statement::Jle(d) => f_v(0x71, d, symbol_table),        
         // Statement::Jl(d) => f_v(0x72, d, symbol_table),
-        Statement::Je(d) => f_v(0x73, d, symbol_table),
-        Statement::Jne(d) => f_v(0x74, d, symbol_table),
+        Code::Je(d) => f_v(0x73, d, symbol_table),
+        Code::Jne(d) => f_v(0x74, d, symbol_table),
 
-        Statement::Cmovl(ra, rb) => Result::Ok(vec![0x22, ass_reg(Some(ra), Some(rb))]),
-        Statement::Cmove(ra, rb) => Result::Ok(vec![0x23, ass_reg(Some(ra), Some(rb))]),
-        Statement::Cmovne(ra, rb) => Result::Ok(vec![0x24, ass_reg(Some(ra), Some(rb))]),        
+        Code::Cmovl(ra, rb) => Result::Ok(vec![0x22, ass_reg(Some(ra), Some(rb))]),
+        Code::Cmove(ra, rb) => Result::Ok(vec![0x23, ass_reg(Some(ra), Some(rb))]),
+        Code::Cmovne(ra, rb) => Result::Ok(vec![0x24, ass_reg(Some(ra), Some(rb))]),        
 
-        Statement::Call(d) => f_v(0x80, d, symbol_table),
-        Statement::Ret => Result::Ok(vec![0x90]),
-        Statement::Pushq(ra) => Result::Ok(vec![0xA0, ass_reg(Some(ra), None)]),
-        Statement::Popq(ra) => Result::Ok(vec![0xB0, ass_reg(Some(ra), None)]),
+        Code::Call(d) => f_v(0x80, d, symbol_table),
+        Code::Ret => Result::Ok(vec![0x90]),
+        Code::Pushq(ra) => Result::Ok(vec![0xA0, ass_reg(Some(ra), None)]),
+        Code::Popq(ra) => Result::Ok(vec![0xB0, ass_reg(Some(ra), None)]),
     }
 }
 
 pub fn assemble_many(
-    statements: &Vec<Statement>,
+    statements: &Vec<Code>,
     symbol_table: &HashMap<String, u64>,
 ) -> Result<Vec<u8>, String> {
     let mut xs = Vec::new();
@@ -400,7 +400,7 @@ pub fn assemble_many(
     Result::Ok(xs)
 }
 
-pub fn code(statements: &Vec<Statement>) -> Result<Vec<u8>, String> {
+pub fn code(statements: &Vec<Code>) -> Result<Vec<u8>, String> {
     let symbol_table = build_symbol_table(&statements);
     assemble_many(&statements, &symbol_table)
 }
@@ -446,24 +446,24 @@ mod tests {
         assert_eq!(
             parse_body("halt\nnop\nrrmovq %rax, %rcx\nirmovq $100, %rax\n"),
             Ok(vec![
-                Statement::Halt,
-                Statement::Nop,
-                Statement::Rrmovq(Register::RAX, Register::RCX),
-                Statement::Irmovq(Imm::Integer(100), Register::RAX),
+                Code::Halt,
+                Code::Nop,
+                Code::Rrmovq(Register::RAX, Register::RCX),
+                Code::Irmovq(Imm::Integer(100), Register::RAX),
             ]),
         );
     }
 
     #[test]
     fn test_symbol_table() {
-        let statements: Vec<Statement> = vec![
-            Statement::Halt,
-            Statement::Nop,
-            Statement::Label("orange".to_string()),
-            Statement::Rrmovq(Register::RAX, Register::RCX),
-            Statement::Label("apple".to_string()),
-            Statement::Irmovq(Imm::Integer(100), Register::RAX),
-            Statement::Label("peach".to_string()),
+        let statements: Vec<Code> = vec![
+            Code::Halt,
+            Code::Nop,
+            Code::Label("orange".to_string()),
+            Code::Rrmovq(Register::RAX, Register::RCX),
+            Code::Label("apple".to_string()),
+            Code::Irmovq(Imm::Integer(100), Register::RAX),
+            Code::Label("peach".to_string()),
         ];
         let tab = build_symbol_table(&statements);
         assert_eq!(tab.get("halt"), None);
@@ -474,19 +474,19 @@ mod tests {
 
     #[test]
     fn test_parse_halt() {
-        assert_eq!(parse_statement("halt   //comment"), Ok(Statement::Halt));
+        assert_eq!(parse_statement("halt   //comment"), Ok(Code::Halt));
     }
 
     #[test]
     fn test_parse_nop() {
-        assert_eq!(parse_statement("nop"), Ok(Statement::Nop));
+        assert_eq!(parse_statement("nop"), Ok(Code::Nop));
     }
 
     #[test]
     fn test_parse_rrmovq() {
         assert_eq!(
             parse_statement("  rrmovq %rax , %rcx"),
-            Ok(Statement::Rrmovq(Register::RAX, Register::RCX))
+            Ok(Code::Rrmovq(Register::RAX, Register::RCX))
         );
     }
 
@@ -494,12 +494,12 @@ mod tests {
     fn test_parse_irmovq() {
         assert_eq!(
             parse_statement("irmovq $100, %rax"),
-            Ok(Statement::Irmovq(Imm::Integer(100), Register::RAX))
+            Ok(Code::Irmovq(Imm::Integer(100), Register::RAX))
         );
 
         assert_eq!(
             parse_statement("mrmovq  10(%rbx), %rax "),
-            Ok(Statement::Mrmovq(
+            Ok(Code::Mrmovq(
                 ModDest {
                     dest: Dest::Integer(10),
                     register: Register::RBX
@@ -510,7 +510,7 @@ mod tests {
 
         assert_eq!(
             parse_statement("rmmovq    %rax , 12(%rbx)  "),
-            Ok(Statement::Rmmovq(
+            Ok(Code::Rmmovq(
                 Register::RAX,
                 ModDest {
                     dest: Dest::Integer(12),
@@ -521,14 +521,14 @@ mod tests {
 
         assert_eq!(
             parse_statement("cmove    %rax , %rbx  "),
-            Ok(Statement::Cmove(
+            Ok(Code::Cmove(
                 Register::RAX,
                 Register::RBX))
         );
 
         assert_eq!(
             parse_statement("cmovne    %rax , %rbx  "),
-            Ok(Statement::Cmovne(
+            Ok(Code::Cmovne(
                 Register::RAX,
                 Register::RBX))
         );
@@ -538,32 +538,32 @@ mod tests {
     fn test_parse_opq() {
         assert_eq!(
             parse_statement("  addq    %rsi,  %rdi  "),
-            Ok(Statement::Addq(Register::RSI, Register::RDI)),
+            Ok(Code::Addq(Register::RSI, Register::RDI)),
         );
 
         assert_eq!(
             parse_statement("subq    %rbp , %r8  "),
-            Ok(Statement::Subq(Register::RBP, Register::R8)),
+            Ok(Code::Subq(Register::RBP, Register::R8)),
         );
     
         assert_eq!(
             parse_statement("andq    %r9,  %r10  "),
-            Ok(Statement::Andq(Register::R9, Register::R10)),
+            Ok(Code::Andq(Register::R9, Register::R10)),
         );
 
         assert_eq!(
             parse_statement("orq    %rax  ,%r11 "),
-            Ok(Statement::Orq(Register::RAX, Register::R11)),
+            Ok(Code::Orq(Register::RAX, Register::R11)),
         );
 
         assert_eq!(
             parse_statement("  mulq  %r9,  %r10  "),
-            Ok(Statement::Mulq(Register::R9, Register::R10)),
+            Ok(Code::Mulq(Register::R9, Register::R10)),
         );
 
         assert_eq!(
             parse_statement(" divq  %rax  ,%r11 "),
-            Ok(Statement::Divq(Register::RAX, Register::R11)),
+            Ok(Code::Divq(Register::RAX, Register::R11)),
         );
     }
 
@@ -571,16 +571,16 @@ mod tests {
     fn test_parse_jxx() {
         assert_eq!(
             parse_statement("je    100  "),
-            Ok(Statement::Je(Dest::Integer(100))),
+            Ok(Code::Je(Dest::Integer(100))),
         );
         assert_eq!(
             parse_statement("je    done  "),
-            Ok(Statement::Je(Dest::Label(String::from("done")))),
+            Ok(Code::Je(Dest::Label(String::from("done")))),
         );
 
         assert_eq!(
             parse_statement("jne    100  "),
-            Ok(Statement::Jne(Dest::Integer(100))),
+            Ok(Code::Jne(Dest::Integer(100))),
         );
     }
 
@@ -588,20 +588,20 @@ mod tests {
     fn test_parse_call() {
         assert_eq!(
             parse_statement("call    100  "),
-            Ok(Statement::Call(Dest::Integer(100))),
+            Ok(Code::Call(Dest::Integer(100))),
         );
     }
 
     #[test]
     fn test_parse_ret() {
-        assert_eq!(parse_statement("ret"), Ok(Statement::Ret),);
+        assert_eq!(parse_statement("ret"), Ok(Code::Ret),);
     }
 
     #[test]
     fn test_parse_pushq() {
         assert_eq!(
             parse_statement("pushq    %rax  "),
-            Ok(Statement::Pushq(Register::RAX)),
+            Ok(Code::Pushq(Register::RAX)),
         );
     }
 
@@ -609,7 +609,7 @@ mod tests {
     fn test_parse_popq() {
         assert_eq!(
             parse_statement("popq    %rax  "),
-            Ok(Statement::Popq(Register::RAX)),
+            Ok(Code::Popq(Register::RAX)),
         );
     }
 }
