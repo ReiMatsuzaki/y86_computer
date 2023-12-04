@@ -101,39 +101,6 @@ impl Parser {
         Prog::new(node)
     }
 
-    fn parse_list(&mut self) -> Vec<String> {
-        self.expect(&Token::Op('('));
-        let mut args = vec![];
-        while let Some(&token) = self.tokens.get(self.pos).as_ref() {
-            match token {
-                Token::Op(')') => {
-                    self.pos += 1;
-                    break;
-                }
-                Token::Id(s) => {
-                    args.push(String::from(s));
-                    self.pos += 1;
-                    if let Some(&token) = self.tokens.get(self.pos).as_ref() {
-                        match token {
-                            Token::Op(')') => {
-                                self.pos += 1;
-                                break;
-                            }
-                            Token::Op(',') => {
-                                self.pos += 1;
-                            }
-                            _ => {
-                                panic!("unexpected token in function def: {:?}", token)
-                            }
-                        }
-                    }
-                }
-                _ => panic!("unexpected token in function def: {:?}", token),
-            }
-        }
-        args
-    }
-
     fn parse_deffun(&mut self) -> Box<Node> {
         self.expect(&Token::Int);
         match self.tokens.get(self.pos) {
@@ -166,14 +133,34 @@ impl Parser {
     }
 
     fn parse_argvar(&mut self) {
+        self.expect(&Token::Op('('));
         self.args = vec![];
-        let args = self.parse_list();
-        for (i, arg) in args.iter().enumerate() {
+        while let Some(token) = self.tokens.get(self.pos) {
+            if Token::Op(')') == *token {
+                self.pos += 1;
+                break;
+            }
+            let token = 1; // FIXME: remove
+            let ty = self.expect_type().unwrap();
+            let name = self.expect_id().unwrap();
+            let offset = 16 + self.args.iter().map(|v| v.ty.size() as i64).sum::<i64>();
             self.args.push(Variable {
-                name: arg.to_string(),
-                offset: 8 * (2 + i as i64),
-                ty: Type::Int,
+                name,
+                offset,
+                ty,
             });
+            match self.tokens.get(self.pos) {
+                Some(Token::Op(')')) => {
+                    self.pos += 1;
+                    break;
+                }
+                Some(Token::Op(',')) => {
+                    self.pos += 1;
+                }
+                _ => {
+                    panic!("unexpected token in function def: {:?}", token)
+                }
+            }
         }
     }
 
@@ -569,8 +556,10 @@ mod tests {
             Token::Int,
             Token::Id(String::from("f")),
             Token::Op('('),
+            Token::Int,
             Token::Id(String::from("a")),
             Token::Op(','),
+            Token::Int,
             Token::Id(String::from("b")),
             Token::Op(')'),
             Token::Op('{'),

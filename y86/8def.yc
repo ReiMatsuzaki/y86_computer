@@ -1,4 +1,4 @@
-int calc(x, y) {
+int calc(int x, int y) {
   int a;
   int b;
   a = x + y;
