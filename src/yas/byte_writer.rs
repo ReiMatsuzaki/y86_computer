@@ -1,6 +1,6 @@
 use std::{collections::HashMap, mem};
 
-use super::code::{Code, Register, Expr, Directive};
+use super::code::{Code, Directive, Expr, Register};
 
 pub struct ByteWriter {
     codes: Vec<Code>,
@@ -66,8 +66,12 @@ impl ByteWriter {
     }
 
     pub fn write_all(&mut self) -> Res<()> {
-        while (self.pos_code < self.codes.len()) && (self.pos_byte < self.bytes.len()) {
-            self.write_code()?;
+        while self.pos_code < self.codes.len() {
+            if self.pos_byte < self.bytes.len() {
+                self.write_code()?;
+            } else {
+                self.error(format!("byte length is too short: {}", self.pos_byte))?;
+            }
         }
         Result::Ok(())
     }
@@ -131,8 +135,8 @@ impl ByteWriter {
             Directive::Pos(i) => {
                 self.pos_byte = *i as usize;
                 Result::Ok(())
-            },
-            Directive::Quad(i) => self.write_expr(i)
+            }
+            Directive::Quad(i) => self.write_expr(i),
         }
     }
 
@@ -150,7 +154,7 @@ impl ByteWriter {
     fn write_quad(&mut self, x: u64) -> Res<()> {
         let xs = x.to_be_bytes();
         for i in 0..8 {
-            self.write_byte(xs[7-i])?;
+            self.write_byte(xs[7 - i])?;
         }
         Ok(())
     }
@@ -190,11 +194,13 @@ impl ByteWriter {
     fn write_expr(&mut self, v: &Expr) -> Res<()> {
         let i = match v {
             Expr::Value(i) => *i,
-            Expr::Label(s) => if self.first_run {
-                0
-            } else {
-                self.find_symbol(s)?
-            }            
+            Expr::Label(s) => {
+                if self.first_run {
+                    0
+                } else {
+                    self.find_symbol(s)?
+                }
+            }
         };
         self.write_quad(i)?;
         Ok(())
@@ -224,11 +230,7 @@ mod tests {
         let mut memory: Vec<u8> = Vec::new();
         memory.resize(20, 0x00);
         let codes = vec![
-            Code::Rmmovq(
-                Register::RAX,
-                Register::RSP,
-                Expr::Value(7),
-            ),
+            Code::Rmmovq(Register::RAX, Register::RSP, Expr::Value(7)),
             Code::Subq(Register::RBX, Register::RCX),
         ];
         let memory = ByteWriter::write(codes, memory).unwrap();
@@ -244,19 +246,15 @@ mod tests {
             Code::Directive(Directive::Pos(2)),
             Code::Label("orange".to_string()),
             Code::Rrmovq(Register::RAX, Register::RBX),
+            Code::Directive(Directive::Pos(8)),
             Code::Label("apple".to_string()),
             Code::Jmp(Expr::Label("apple".to_string())),
         ];
         let mut memory: Vec<u8> = Vec::new();
-        memory.resize(20, 0x00);
+        memory.resize(18, 0x00);
         let memory = ByteWriter::write(codes, memory).unwrap();
         let expe: Vec<u8> = vec![
-            0, 0, 
-            0x20, 0x03, 
-            0x70, 0x04, 
-            0, 0, 0, 0,
-            0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0,
+            0, 0, 0x20, 0x03, 0, 0, 0, 0, 0x70, 0x08, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
         assert_eq!(expe, memory);
     }
