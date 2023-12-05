@@ -16,8 +16,10 @@ pub struct ByteWriteError {
     pub pos: usize,
 }
 
+type Res<T> = Result<T, ByteWriteError>;
+
 impl ByteWriter {
-    pub fn write(codes: Vec<Code>, bytes: Vec<u8>) -> Result<Vec<u8>, ByteWriteError> {
+    pub fn write(codes: Vec<Code>, bytes: Vec<u8>) -> Res<Vec<u8>> {
         let mut writer = ByteWriter::new(codes, bytes);
         writer.write_all()?;
         Ok(mem::take(&mut writer.bytes))
@@ -34,7 +36,7 @@ impl ByteWriter {
         }
     }
 
-    fn error<T>(&self, message: String) -> Result<T, ByteWriteError> {
+    fn error<T>(&self, message: String) -> Res<T> {
         Result::Err(ByteWriteError {
             message,
             pos: self.pos_code,
@@ -48,7 +50,7 @@ impl ByteWriter {
         }
     }
 
-    pub fn write_all(&mut self) -> Result<(), ByteWriteError> {
+    pub fn write_all(&mut self) -> Res<()> {
         while (self.pos_code < self.codes.len()) && (self.pos_byte < self.bytes.len()) {
             self.write_code()?;
         }
@@ -71,7 +73,7 @@ impl ByteWriter {
         (*self.codes.get(self.pos_code).unwrap()).clone()
     }
 
-    fn write_code(&mut self) -> Result<(), ByteWriteError> {
+    fn write_code(&mut self) -> Res<()> {
         let res = match self.get_code() {
             Code::Label(_) => Ok(()),
             Code::Halt => self.write_byte(0x00),
@@ -155,7 +157,7 @@ impl ByteWriter {
         }
     }
 
-    fn write_byte(&mut self, x: u8) -> Result<(), ByteWriteError> {
+    fn write_byte(&mut self, x: u8) -> Res<()> {
         if self.pos_byte >= self.bytes.len() {
             return self.error(format!("byte length is too short: {}", self.pos_byte));
         }
@@ -164,7 +166,7 @@ impl ByteWriter {
         Result::Ok(())
     }
 
-    fn write_quad(&mut self, x: u64) -> Result<(), ByteWriteError> {
+    fn write_quad(&mut self, x: u64) -> Res<()> {
         let xs = x.to_be_bytes();
         for i in 0..8 {
             self.bytes[self.pos_byte + i] = xs[7 - i];
@@ -173,22 +175,17 @@ impl ByteWriter {
         Ok(())
     }
 
-    fn write_fn_ra_rb(
-        &mut self,
-        x: u8,
-        ra: &Register,
-        rb: &Register,
-    ) -> Result<(), ByteWriteError> {
+    fn write_fn_ra_rb(&mut self, x: u8, ra: &Register, rb: &Register) -> Res<()> {
         self.write_byte(x)?;
         self.write_registers(ra, rb)
     }
 
-    fn write_fn_d(&mut self, x: u8, d: &Dest) -> Result<(), ByteWriteError> {
+    fn write_fn_d(&mut self, x: u8, d: &Dest) -> Res<()> {
         self.write_byte(x)?;
         self.write_dest(d)
     }
 
-    fn write_registers(&mut self, ra: &Register, rb: &Register) -> Result<(), ByteWriteError> {
+    fn write_registers(&mut self, ra: &Register, rb: &Register) -> Res<()> {
         fn f(r: &Register) -> u8 {
             match r {
                 Register::RAX => 0x00,
@@ -210,7 +207,7 @@ impl ByteWriter {
         self.write_byte(x)
     }
 
-    fn write_imm(&mut self, v: &Imm) -> Result<(), ByteWriteError> {
+    fn write_imm(&mut self, v: &Imm) -> Res<()> {
         let i: u64 = match v {
             Imm::Integer(i) => *i,
             Imm::Label(s) => self.find_symbol(s)?,
@@ -219,7 +216,7 @@ impl ByteWriter {
         Ok(())
     }
 
-    fn write_dest(&mut self, d: &Dest) -> Result<(), ByteWriteError> {
+    fn write_dest(&mut self, d: &Dest) -> Res<()> {
         let x: u64 = match d {
             Dest::Integer(i) => *i,
             Dest::Label(s) => self.find_symbol(s)?,
@@ -228,7 +225,7 @@ impl ByteWriter {
         Ok(())
     }
 
-    fn find_symbol(&self, s: &str) -> Result<u64, ByteWriteError> {
+    fn find_symbol(&self, s: &str) -> Res<u64> {
         self.symbol_table
             .get(s)
             .ok_or(self.byte_write_error(format!("failed to find symbol: {}", s)))
