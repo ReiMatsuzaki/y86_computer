@@ -8,6 +8,8 @@ pub struct ByteWriter {
     symbol_table: HashMap<String, u64>,
     pos_code: usize,
     pos_byte: usize,
+    first_run: bool,
+    symbol_ref_table: HashMap<String, Vec<u64>>,
 }
 
 #[derive(Debug)]
@@ -22,17 +24,32 @@ impl ByteWriter {
     pub fn write(codes: Vec<Code>, bytes: Vec<u8>) -> Res<Vec<u8>> {
         let mut writer = ByteWriter::new(codes, bytes);
         writer.write_all()?;
+        writer.finish_first_run()?;
+        writer.write_all()?;
         Ok(mem::take(&mut writer.bytes))
     }
 
     pub fn new(codes: Vec<Code>, bytes: Vec<u8>) -> ByteWriter {
-        let symbol_table = Self::build_symbol_table(&codes);
+        // let symbol_table = Self::build_symbol_table(&codes);
         ByteWriter {
             codes,
             bytes,
-            symbol_table,
+            symbol_table: HashMap::new(),
             pos_code: 0,
             pos_byte: 0,
+            first_run: true,
+            symbol_ref_table: HashMap::new(),
+        }
+    }
+
+    fn finish_first_run(&mut self) -> Res<()> {
+        if self.first_run {
+            self.first_run = false;
+            self.pos_byte = 0;
+            self.pos_code = 0;
+            Result::Ok(())
+        } else {
+            self.error("finish_first_run is called twice".to_string())
         }
     }
 
@@ -57,21 +74,6 @@ impl ByteWriter {
         Result::Ok(())
     }
 
-    fn build_symbol_table(codes: &Vec<Code>) -> HashMap<String, u64> {
-        let mut table = HashMap::new();
-        let mut addr = 0;
-        for code in codes {
-            if let Code::Label(s) = code {
-                table.insert(s.to_string(), addr);
-            }
-            // FIXME: don't use byte_length
-            // reading line and store current byte pos
-            // rename this function as first path or searching label
-            addr += Self::byte_length(&code);
-        }
-        table
-    }
-
     fn get_code(&self) -> Code {
         (*self.codes.get(self.pos_code).unwrap()).clone()
     }
@@ -79,7 +81,7 @@ impl ByteWriter {
     fn write_code(&mut self) -> Res<()> {
         let res = match self.get_code() {
             Code::Directive(d) => self.write_directive(&d),
-            Code::Label(_) => Ok(()),
+            Code::Label(s) => self.add_symbol(s),
             Code::Halt => self.write_byte(0x00),
             Code::Nop => self.write_byte(0x10),
 
@@ -136,47 +138,13 @@ impl ByteWriter {
         }
     }
 
-    fn byte_length(statement: &Code) -> u64 {
-        match statement {
-            Code::Directive(_) => panic!("directive length is difficult"),
-            Code::Label(_) => 0,
-            Code::Halt => 1,
-            Code::Nop => 1,
-
-            Code::Rrmovq(_, _) => 2,
-            Code::Irmovq(_, _) => 10,
-            Code::Rmmovq(_, _, _) => 10,
-            Code::Mrmovq(_, _, _) => 10,
-
-            Code::Addq(_, _) => 2,
-            Code::Subq(_, _) => 2,
-            Code::Andq(_, _) => 2,
-            Code::Orq(_, _) => 2,
-            Code::Mulq(_, _) => 2,
-            Code::Divq(_, _) => 2,
-
-            Code::Jmp(_) => 9,
-            // Statement::Jle(_) => 9,
-            // Statement::Jl(_) => 9,
-            Code::Je(_) => 9,
-            Code::Jne(_) => 9,
-
-            Code::Cmovl(_, _) => 2,
-            Code::Cmove(_, _) => 2,
-            Code::Cmovne(_, _) => 2,
-
-            Code::Call(_) => 9,
-            Code::Ret => 1,
-            Code::Pushq(_) => 2,
-            Code::Popq(_) => 2,
-        }
-    }
-
     fn write_byte(&mut self, x: u8) -> Res<()> {
         if self.pos_byte >= self.bytes.len() {
             return self.error(format!("byte length is too short: {}", self.pos_byte));
         }
-        self.bytes[self.pos_byte] = x;
+        if !self.first_run {
+            self.bytes[self.pos_byte] = x;
+        }
         self.pos_byte += 1;
         Result::Ok(())
     }
@@ -184,9 +152,8 @@ impl ByteWriter {
     fn write_quad(&mut self, x: u64) -> Res<()> {
         let xs = x.to_be_bytes();
         for i in 0..8 {
-            self.bytes[self.pos_byte + i] = xs[7 - i];
+            self.write_byte(xs[7-i])?;
         }
-        self.pos_byte += 8;
         Ok(())
     }
 
@@ -225,10 +192,25 @@ impl ByteWriter {
     fn write_expr(&mut self, v: &Expr) -> Res<()> {
         let i = match v {
             Expr::Value(i) => *i,
-            Expr::Label(s) => self.find_symbol(s)?,
+            Expr::Label(s) => if self.first_run {
+                self.symbol_ref_table
+                .entry(s.to_string())
+                .or_insert(Vec::new())
+                .push(self.pos_byte as u64);
+                0
+            } else {
+                self.find_symbol(s)?
+            }            
         };
         self.write_quad(i)?;
         Ok(())
+    }
+
+    fn add_symbol(&mut self, s: String) -> Res<()> {
+        if self.first_run {
+            self.symbol_table.insert(s, self.pos_byte as u64);
+        }
+        Result::Ok(())
     }
 
     fn find_symbol(&self, s: &str) -> Res<u64> {
@@ -263,20 +245,25 @@ mod tests {
     }
 
     #[test]
-    fn test_symbol_table() {
+    fn test_byte_writer_2() {
         let codes: Vec<Code> = vec![
-            Code::Halt,
-            Code::Nop,
+            Code::Directive(Directive::Pos(2)),
             Code::Label("orange".to_string()),
-            Code::Rrmovq(Register::RAX, Register::RCX),
+            Code::Rrmovq(Register::RAX, Register::RBX),
             Code::Label("apple".to_string()),
-            Code::Irmovq(Register::RAX, Expr::Value(100)),
-            Code::Label("peach".to_string()),
+            Code::Jmp(Expr::Label("apple".to_string())),
         ];
-        let tab = ByteWriter::build_symbol_table(&codes);
-        assert_eq!(tab.get("halt"), None);
-        assert_eq!(tab.get("orange"), Some(2).as_ref());
-        assert_eq!(tab.get("apple"), Some(4).as_ref());
-        assert_eq!(tab.get("peach"), Some(14).as_ref());
+        let mut memory: Vec<u8> = Vec::new();
+        memory.resize(20, 0x00);
+        let memory = ByteWriter::write(codes, memory).unwrap();
+        let expe: Vec<u8> = vec![
+            0, 0, 
+            0x20, 0x03, 
+            0x70, 0x04, 
+            0, 0, 0, 0,
+            0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
+        ];
+        assert_eq!(expe, memory);
     }
 }
