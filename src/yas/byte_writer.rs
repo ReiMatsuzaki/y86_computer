@@ -9,7 +9,6 @@ pub struct ByteWriter {
     pos_code: usize,
     pos_byte: usize,
     first_run: bool,
-    symbol_ref_table: HashMap<String, Vec<u64>>,
 }
 
 #[derive(Debug)]
@@ -38,7 +37,6 @@ impl ByteWriter {
             pos_code: 0,
             pos_byte: 0,
             first_run: true,
-            symbol_ref_table: HashMap::new(),
         }
     }
 
@@ -193,10 +191,6 @@ impl ByteWriter {
         let i = match v {
             Expr::Value(i) => *i,
             Expr::Label(s) => if self.first_run {
-                self.symbol_ref_table
-                .entry(s.to_string())
-                .or_insert(Vec::new())
-                .push(self.pos_byte as u64);
                 0
             } else {
                 self.find_symbol(s)?
