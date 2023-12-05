@@ -1,4 +1,4 @@
-use super::code::{Code, Register, Expr};
+use super::code::{Code, Register, Expr, Directive};
 
 #[derive(Debug, PartialEq)]
 pub struct ScanError {
@@ -43,9 +43,23 @@ impl Scanner {
             Some(i) => input[..i].trim(),
             None => input.trim(),
         };
-        match input.find(":") {
-            Some(i) => Ok(Code::Label(input[..i].to_string())),
-            None => self.scan_command(input),
+        match (input.find(":"), input.find(".")) {
+            (Some(i), None) => Ok(Code::Label(input[..i].to_string())),
+            (None, Some(_)) => self.scan_directive(&input),
+            (None, None) => self.scan_command(input),
+            _ => self.error(format!("invalid statement: {}", input)),
+        }
+    }
+
+    fn scan_directive(&self, input: &str) -> Result<Code, ScanError> {
+        let parts: Vec<&str> = input.split(" ").collect();
+        match parts.as_slice() {
+            [".pos", pos] => match pos.parse::<u64>() {
+                Ok(i) => Ok(Code::Directive(Directive::Pos(i))),
+                Err(e) => self.error(e.to_string()),
+            }
+            [".quad", expr] => Ok(Code::Directive(Directive::Quad(self.scan_expr(expr)?))),
+            _ => self.error(format!("invalid directive: {}", input)),
         }
     }
 

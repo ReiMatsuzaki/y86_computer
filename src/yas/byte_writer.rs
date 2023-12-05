@@ -1,6 +1,6 @@
 use std::{collections::HashMap, mem};
 
-use super::code::{Code, Register, Expr};
+use super::code::{Code, Register, Expr, Directive};
 
 pub struct ByteWriter {
     codes: Vec<Code>,
@@ -64,6 +64,9 @@ impl ByteWriter {
             if let Code::Label(s) = code {
                 table.insert(s.to_string(), addr);
             }
+            // FIXME: don't use byte_length
+            // reading line and store current byte pos
+            // rename this function as first path or searching label
             addr += Self::byte_length(&code);
         }
         table
@@ -75,6 +78,7 @@ impl ByteWriter {
 
     fn write_code(&mut self) -> Res<()> {
         let res = match self.get_code() {
+            Code::Directive(d) => self.write_directive(&d),
             Code::Label(_) => Ok(()),
             Code::Halt => self.write_byte(0x00),
             Code::Nop => self.write_byte(0x10),
@@ -122,8 +126,19 @@ impl ByteWriter {
         res
     }
 
+    fn write_directive(&mut self, d: &Directive) -> Res<()> {
+        match d {
+            Directive::Pos(i) => {
+                self.pos_byte = *i as usize;
+                Result::Ok(())
+            },
+            Directive::Quad(i) => self.write_expr(i)
+        }
+    }
+
     fn byte_length(statement: &Code) -> u64 {
         match statement {
+            Code::Directive(_) => panic!("directive length is difficult"),
             Code::Label(_) => 0,
             Code::Halt => 1,
             Code::Nop => 1,

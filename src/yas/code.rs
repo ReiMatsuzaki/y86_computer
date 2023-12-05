@@ -46,7 +46,14 @@ pub enum Expr {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum Directive {
+    Pos(u64),
+    Quad(Expr)
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Code {
+    Directive(Directive),
     Label(String),
     Halt,
     Nop,
