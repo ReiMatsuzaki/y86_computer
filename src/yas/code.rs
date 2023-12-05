@@ -58,7 +58,7 @@ impl FromStr for Imm {
         } else if num_str.chars().all(char::is_alphabetic) {
             Ok(Imm::Label(num_str.to_string()))
         } else {
-            Err(format!("Invalid value: {}", input))
+            Err(format!("Invalid value as Imm: {}", input))
         }
     }
 }
@@ -79,7 +79,7 @@ impl FromStr for Dest {
         } else if num_str.chars().all(char::is_alphabetic) {
             Ok(Dest::Label(num_str.to_string()))
         } else {
-            Err(format!("Invalid value: {}", input))
+            Err(format!("Invalid input as Dest: {}", input))
         }
     }
 }

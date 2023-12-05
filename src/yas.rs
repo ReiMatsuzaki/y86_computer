@@ -2,7 +2,7 @@ pub(crate) mod code;
 mod ys_scanner;
 mod byte_writer;
 
-use std::fs;
+use std::{fs, f32::consts::E};
 
 use self::code::Code;
 
@@ -20,7 +20,11 @@ pub fn parse_file(filename: &str)  -> Result<Vec<Code>, String> {
         Err(e) => Err(format!("error at reading file: {}", e)),
         Ok(s) => Ok(s)
     }?;
-    ys_scanner::parse_body(&src)
+    match ys_scanner::Scanner::scan(&src) {
+        Err(e) => Err(format!("error at scanning: {}", e.message)),
+        Ok(s) => Ok(s)
+    }
+    
 }
 
 pub fn write_bytes(codes: &Vec<Code>) -> Result<Vec<u8>, String> {
@@ -34,11 +38,9 @@ mod tests {
     #[test]
     fn test_assemble() {
         let input = "halt";
-        let expe = Result::Ok(vec![0x00]);
-        let calc = ys_scanner::parse_body(input);
-        let calc = calc.and_then(|x| write_bytes(&x));
-        // let calc = assemble(input);
-        // let calc = calc;
+        let expe = vec![0x00];
+        let calc = ys_scanner::Scanner::new().scan_src(input).unwrap();
+        let calc = write_bytes(&calc).unwrap();
         assert_eq!(expe, calc);
     }
 }
