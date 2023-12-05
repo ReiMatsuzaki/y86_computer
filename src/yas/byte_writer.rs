@@ -1,59 +1,198 @@
 use std::collections::HashMap;
 
-use super::code::{Code, Register, Imm, Dest};
+use super::code::{Code, Dest, Imm, Register};
 
-fn byte_length(statement: &Code) -> u64 {
-    match statement {
-        Code::Label(_) => 0,
-        Code::Halt => 1,
-        Code::Nop => 1,
-
-        Code::Rrmovq(_, _) => 2,
-        Code::Irmovq(_, _) => 10,
-        Code::Rmmovq(_, _) => 10,
-        Code::Mrmovq(_, _) => 10,
-
-        Code::Addq(_, _) => 2,
-        Code::Subq(_, _) => 2,
-        Code::Andq(_, _) => 2,
-        Code::Orq(_, _) => 2,
-        Code::Mulq(_, _) => 2,
-        Code::Divq(_, _) => 2,        
-
-        Code::Jmp(_) => 9,
-        // Statement::Jle(_) => 9,
-        // Statement::Jl(_) => 9,
-        Code::Je(_) => 9,
-        Code::Jne(_) => 9,
-
-        Code::Cmovl(_, _) => 2,
-        Code::Cmove(_, _) => 2,
-        Code::Cmovne(_, _) => 2,
-
-        Code::Call(_) => 9,
-        Code::Ret => 1,
-        Code::Pushq(_) => 2,
-        Code::Popq(_) => 2,
-    }
+pub struct ByteWriter {
+    codes: Vec<Code>,
+    symbol_table: HashMap<String, u64>,
+    pos_code: usize,
+    pos_byte: usize,
 }
 
-pub fn build_symbol_table(statements: &Vec<Code>) -> HashMap<String, u64> {
-    let mut table = HashMap::new();
-    let mut addr = 0;
-    for statement in statements {
-        if let Code::Label(s) = statement {
-            table.insert(s.to_string(), addr);
+pub struct ByteWriteError {
+    pub message: String,
+    pub pos: usize,
+}
+
+impl ByteWriter {
+    pub fn write(codes: Vec<Code>, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+        let mut writer = ByteWriter::new(codes);
+        writer.write_all(bytes)
+    }
+
+    pub fn new(codes: Vec<Code>) -> ByteWriter {
+        let symbol_table = Self::build_symbol_table(&codes);
+        ByteWriter {
+            codes,
+            symbol_table,
+            pos_code: 0,
+            pos_byte: 0,
         }
-        addr += byte_length(&statement);
     }
-    table
-}
 
-fn ass_reg(ra: Option<&Register>, rb: Option<&Register>) -> u8 {
-    fn f(r: Option<&Register>) -> u8 {
-        match r {
-            None => 0x0F,
-            Some(r) => match r {
+    fn error<T>(&self, message: String) -> Result<T, ByteWriteError> {
+        Result::Err(ByteWriteError {
+            message,
+            pos: self.pos_code,
+        })
+    }
+
+    fn byte_write_error(&self, message: String) -> ByteWriteError {
+        ByteWriteError {
+            message,
+            pos: self.pos_code,
+        }
+    }
+
+    pub fn write_all(&mut self, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+        while (self.pos_code < self.codes.len()) && (self.pos_byte < bytes.len()) {
+            self.write_code(bytes)?;
+        }
+        Result::Ok(())
+    }
+
+    fn build_symbol_table(codes: &Vec<Code>) -> HashMap<String, u64> {
+        let mut table = HashMap::new();
+        let mut addr = 0;
+        for code in codes {
+            if let Code::Label(s) = code {
+                table.insert(s.to_string(), addr);
+            }
+            addr += Self::byte_length(&code);
+        }
+        table
+    }
+
+    fn get_code(&self) -> Code {
+        (*self.codes.get(self.pos_code).unwrap()).clone()
+    }
+
+    fn write_code(&mut self, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+        let res = match self.get_code() {
+            Code::Label(_) => Ok(()),
+            Code::Halt => self.write_byte(0x00, bytes),
+            Code::Nop => self.write_byte(0x10, bytes),
+
+            Code::Rrmovq(ra, rb) => self.write_fn_ra_rb(0x20, &ra, &rb, bytes),
+            Code::Cmovl(ra, rb) => self.write_fn_ra_rb(0x22, &ra, &rb, bytes),
+            Code::Cmove(ra, rb) => self.write_fn_ra_rb(0x23, &ra, &rb, bytes),
+            Code::Cmovne(ra, rb) => self.write_fn_ra_rb(0x24, &ra, &rb, bytes),
+
+            Code::Irmovq(v, rb) => {
+                self.write_byte(0x30, bytes)?;
+                self.write_registers(&Register::RNONE, &rb, bytes)?;
+                self.write_imm(&v, bytes)
+            }
+            Code::Rmmovq(ra, m) => {
+                self.write_byte(0x40, bytes)?;
+                self.write_registers(&ra, &m.register, bytes)?;
+                self.write_dest(&m.dest, bytes)
+            }
+            Code::Mrmovq(a, ra) => {
+                self.write_byte(0x50, bytes)?;
+                self.write_registers(&ra, &a.register, bytes)?;
+                self.write_dest(&a.dest, bytes)
+            }
+
+            Code::Addq(ra, rb) => self.write_fn_ra_rb(0x60, &ra, &rb, bytes),
+            Code::Subq(ra, rb) => self.write_fn_ra_rb(0x61, &ra, &rb, bytes),
+            Code::Andq(ra, rb) => self.write_fn_ra_rb(0x62, &ra, &rb, bytes),
+            Code::Orq(ra, rb) => self.write_fn_ra_rb(0x63, &ra, &rb, bytes),
+            Code::Mulq(ra, rb) => self.write_fn_ra_rb(0x64, &ra, &rb, bytes),
+            Code::Divq(ra, rb) => self.write_fn_ra_rb(0x65, &ra, &rb, bytes),
+
+            Code::Jmp(d) => self.write_fn_d(0x70, &d, bytes),
+            //     // Statement::Jle(d) => f_v(0x71, d, symbol_table),
+            //     // Statement::Jl(d) => f_v(0x72, d, symbol_table),
+            Code::Je(d) => self.write_fn_d(0x73, &d, bytes),
+            Code::Jne(d) => self.write_fn_d(0x74, &d, bytes),
+
+            Code::Call(d) => self.write_fn_d(0x80, &d, bytes),
+            Code::Ret => self.write_byte(0x90, bytes),
+            Code::Pushq(ra) => self.write_fn_ra_rb(0xA0, &ra, &Register::RNONE, bytes),
+            Code::Popq(ra) => self.write_fn_ra_rb(0xB0, &ra, &Register::RNONE, bytes),
+        };
+        self.pos_code += 1;
+        res
+    }
+
+    fn byte_length(statement: &Code) -> u64 {
+        match statement {
+            Code::Label(_) => 0,
+            Code::Halt => 1,
+            Code::Nop => 1,
+
+            Code::Rrmovq(_, _) => 2,
+            Code::Irmovq(_, _) => 10,
+            Code::Rmmovq(_, _) => 10,
+            Code::Mrmovq(_, _) => 10,
+
+            Code::Addq(_, _) => 2,
+            Code::Subq(_, _) => 2,
+            Code::Andq(_, _) => 2,
+            Code::Orq(_, _) => 2,
+            Code::Mulq(_, _) => 2,
+            Code::Divq(_, _) => 2,
+
+            Code::Jmp(_) => 9,
+            // Statement::Jle(_) => 9,
+            // Statement::Jl(_) => 9,
+            Code::Je(_) => 9,
+            Code::Jne(_) => 9,
+
+            Code::Cmovl(_, _) => 2,
+            Code::Cmove(_, _) => 2,
+            Code::Cmovne(_, _) => 2,
+
+            Code::Call(_) => 9,
+            Code::Ret => 1,
+            Code::Pushq(_) => 2,
+            Code::Popq(_) => 2,
+        }
+    }
+
+    fn write_byte(&mut self, x: u8, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+        if self.pos_byte >= bytes.len() {
+            return self.error(format!("byte length is too short: {}", self.pos_byte));
+        }
+        bytes[self.pos_byte] = x;
+        self.pos_byte += 1;
+        Result::Ok(())
+    }
+
+    fn write_quad(&mut self, x: u64, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+        let xs = x.to_be_bytes();
+        for i in 0..8 {
+            bytes[self.pos_byte + i] = xs[7 - i];
+        }
+        self.pos_byte += 8;
+        Ok(())
+    }
+
+    fn write_fn_ra_rb(
+        &mut self,
+        x: u8,
+        ra: &Register,
+        rb: &Register,
+        bytes: &mut Vec<u8>,
+    ) -> Result<(), ByteWriteError> {
+        self.write_byte(x, bytes)?;
+        self.write_registers(ra, rb, bytes)
+    }
+
+    fn write_fn_d(&mut self, x: u8, d: &Dest, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+        self.write_byte(x, bytes)?;
+        self.write_dest(d, bytes)
+    }
+
+    fn write_registers(
+        &mut self,
+        ra: &Register,
+        rb: &Register,
+        bytes: &mut Vec<u8>,
+    ) -> Result<(), ByteWriteError> {
+        fn f(r: &Register) -> u8 {
+            match r {
                 Register::RAX => 0x00,
                 Register::RCX => 0x01,
                 Register::RDX => 0x02,
@@ -66,146 +205,69 @@ fn ass_reg(ra: Option<&Register>, rb: Option<&Register>) -> u8 {
                 Register::R9 => 0x09,
                 Register::R10 => 0x0A,
                 Register::R11 => 0x0B,
-            },
+                Register::RNONE => 0x0F,
+            }
         }
+        let x = (f(ra) << 4) + f(rb);
+        self.write_byte(x, bytes)
     }
-    (f(ra) << 4) + f(rb)
-}
 
-fn ass_imm(v: &Imm, symbol_table: &HashMap<String, u64>) -> Result<[u8; 8], String> {
-    let x: u64 = match v {
-        Imm::Integer(i) => *i,
-        Imm::Label(s) => symbol_table
+    fn write_imm(&mut self, v: &Imm, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+        let i: u64 = match v {
+            Imm::Integer(i) => *i,
+            Imm::Label(s) => self.find_symbol(s)?,
+        };
+        self.write_quad(i, bytes)?;
+        Ok(())
+    }
+
+    fn write_dest(&mut self, d: &Dest, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+        let x: u64 = match d {
+            Dest::Integer(i) => *i,
+            Dest::Label(s) => self.find_symbol(s)?,
+        };
+        self.write_quad(x, bytes)?;
+        Ok(())
+    }
+
+    fn find_symbol(&self, s: &str) -> Result<u64, ByteWriteError> {
+        self.symbol_table
             .get(s)
-            .ok_or(format!("failed to find symbol: {}", s))?
-            .clone(),
-    };
-    let mut xs = x.to_be_bytes();
-    xs.reverse();
-    Result::Ok(xs)
-}
-
-fn ass_dest(d: &Dest, symbol_table: &HashMap<String, u64>) -> Result<[u8; 8], String> {
-    // FIXME: duplicated code
-    let x: u64 = match d {
-        Dest::Integer(i) => *i,
-        Dest::Label(s) => symbol_table
-            .get(s)
-            .ok_or(format!("failed to find symbol: {}", s))?
-            .clone(),
-    };
-    let mut xs = x.to_be_bytes();
-    xs.reverse();
-    Result::Ok(xs)
-}
-
-fn assemble_one(
-    statement: &Code,
-    symbol_table: &HashMap<String, u64>,
-) -> Result<Vec<u8>, String> {
-    fn f_v(head: u8, d: &Dest, symbol_table: &HashMap<String, u64>) -> Result<Vec<u8>, String> {
-        let xs = ass_dest(d, symbol_table)?;
-        Result::Ok(vec![
-            head, xs[0], xs[1], xs[2], xs[3], xs[4], xs[5], xs[6], xs[7],
-        ])
-    }
-    match statement {
-        Code::Label(_) => Result::Ok(Vec::new()),
-        Code::Halt => Result::Ok(vec![0x00]),
-        Code::Nop => Result::Ok(vec![0x10]),
-
-        Code::Rrmovq(ra, rb) => Result::Ok(vec![0x20, ass_reg(Some(ra), Some(rb))]),
-        Code::Irmovq(v, rb) => {
-            let r = ass_reg(None, Some(rb));
-            let xs = ass_imm(v, symbol_table)?;
-            Result::Ok(vec![
-                0x30, r, xs[0], xs[1], xs[2], xs[3], xs[4], xs[5], xs[6], xs[7],
-            ])
-        }
-        Code::Rmmovq(ra, a) => {
-            let r = ass_reg(Some(ra), Some(&a.register));
-            let xs = ass_dest(&a.dest, symbol_table)?;
-            Result::Ok(vec![
-                0x40, r, xs[0], xs[1], xs[2], xs[3], xs[4], xs[5], xs[6], xs[7],
-            ])
-        }
-        Code::Mrmovq(a, ra) => {
-            let r = ass_reg(Some(ra), Some(&a.register));
-            let xs = ass_dest(&a.dest, symbol_table)?;
-            Result::Ok(vec![
-                0x50, r, xs[0], xs[1], xs[2], xs[3], xs[4], xs[5], xs[6], xs[7],
-            ])
-        }
-
-        Code::Addq(ra, rb) => Result::Ok(vec![0x60, ass_reg(Some(ra), Some(rb))]),
-        Code::Subq(ra, rb) => Result::Ok(vec![0x61, ass_reg(Some(ra), Some(rb))]),
-        Code::Andq(ra, rb) => Result::Ok(vec![0x62, ass_reg(Some(ra), Some(rb))]),
-        Code::Orq(ra, rb) => Result::Ok(vec![0x63, ass_reg(Some(ra), Some(rb))]),
-        Code::Mulq(ra, rb) => Result::Ok(vec![0x64, ass_reg(Some(ra), Some(rb))]),
-        Code::Divq(ra, rb) => Result::Ok(vec![0x65, ass_reg(Some(ra), Some(rb))]),
-
-        Code::Jmp(d) => f_v(0x70, d, symbol_table),
-        // Statement::Jle(d) => f_v(0x71, d, symbol_table),        
-        // Statement::Jl(d) => f_v(0x72, d, symbol_table),
-        Code::Je(d) => f_v(0x73, d, symbol_table),
-        Code::Jne(d) => f_v(0x74, d, symbol_table),
-
-        Code::Cmovl(ra, rb) => Result::Ok(vec![0x22, ass_reg(Some(ra), Some(rb))]),
-        Code::Cmove(ra, rb) => Result::Ok(vec![0x23, ass_reg(Some(ra), Some(rb))]),
-        Code::Cmovne(ra, rb) => Result::Ok(vec![0x24, ass_reg(Some(ra), Some(rb))]),        
-
-        Code::Call(d) => f_v(0x80, d, symbol_table),
-        Code::Ret => Result::Ok(vec![0x90]),
-        Code::Pushq(ra) => Result::Ok(vec![0xA0, ass_reg(Some(ra), None)]),
-        Code::Popq(ra) => Result::Ok(vec![0xB0, ass_reg(Some(ra), None)]),
+            .ok_or(self.byte_write_error(format!("failed to find symbol: {}", s)))
+            .map(|x| *x)
     }
 }
-
-pub fn assemble_many(
-    statements: &Vec<Code>,
-    symbol_table: &HashMap<String, u64>,
-) -> Result<Vec<u8>, String> {
-    let mut xs = Vec::new();
-    for s in statements {
-        let mut ys = assemble_one(s, symbol_table)?;
-        xs.append(&mut ys);
-    }
-    Result::Ok(xs)
-}
-
-pub fn code(statements: &Vec<Code>) -> Result<Vec<u8>, String> {
-    let symbol_table = build_symbol_table(&statements);
-    assemble_many(&statements, &symbol_table)
-}
-
-// fn assemble(body: &str) -> Result<Vec<u8>, String> {
-//     let statements = parse_body(body)?;
-//     code(&statements)
-// }
 
 #[cfg(test)]
 mod tests {
+    use crate::yas::code::ModDest;
+
     use super::*;
 
     #[test]
-    fn test_ass_imm() {
-        let v = Imm::Integer(9);
-        let st = HashMap::new();
-        let calc = ass_imm(&v, &st);
-        let expe: [u8; 8] = [9, 0, 0, 0, 0, 0, 0, 0];
-        assert_eq!(Result::Ok(expe), calc);
-
-        let v = Imm::Label(String::from("apple"));
-        let mut st = HashMap::new();
-        st.insert(String::from("apple"), 13);
-        let calc = ass_imm(&v, &st);
-        let expe: [u8; 8] = [13, 0, 0, 0, 0, 0, 0, 0];
-        assert_eq!(Result::Ok(expe), calc);
+    fn test_byte_writer() {
+        let mut memory: Vec<u8> = Vec::new();
+        memory.resize(20, 0x00);
+        let codes = vec![
+            Code::Rmmovq(
+                Register::RAX,
+                ModDest {
+                    register: Register::RSP,
+                    dest: Dest::Integer(7),
+                },
+            ),
+            Code::Subq(Register::RBX, Register::RCX),
+        ];
+        let _ = ByteWriter::write(codes, &mut memory);
+        let expe: Vec<u8> = vec![
+            0x40, 0x04, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x61, 0x31, 0x00, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        assert_eq!(expe, memory);
     }
 
     #[test]
     fn test_symbol_table() {
-        let statements: Vec<Code> = vec![
+        let codes: Vec<Code> = vec![
             Code::Halt,
             Code::Nop,
             Code::Label("orange".to_string()),
@@ -214,7 +276,7 @@ mod tests {
             Code::Irmovq(Imm::Integer(100), Register::RAX),
             Code::Label("peach".to_string()),
         ];
-        let tab = build_symbol_table(&statements);
+        let tab = ByteWriter::build_symbol_table(&codes);
         assert_eq!(tab.get("halt"), None);
         assert_eq!(tab.get("orange"), Some(2).as_ref());
         assert_eq!(tab.get("apple"), Some(4).as_ref());

@@ -1,15 +1,16 @@
-use std::{path::Path, ffi::OsStr};
+use std::{ffi::OsStr, path::Path};
 
-use crate::{ycc, yas, yis::{self, Y8R}};
+use crate::{
+    yas, ycc,
+    yis::{self, Y8R},
+};
 
 // Y86_64 simulator
-pub fn run(
-    filename: &str,
-    command: &str,
-    log_level: i64,
-    wrange: Option<(usize, usize)>,
-) -> u64 {
-    let extension = Path::new(filename).extension().and_then(OsStr::to_str).unwrap();
+pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize, usize)>) -> u64 {
+    let extension = Path::new(filename)
+        .extension()
+        .and_then(OsStr::to_str)
+        .unwrap();
     let statements = match extension {
         "yc" => {
             if log_level >= 0 {
@@ -23,7 +24,7 @@ pub fn run(
             if log_level >= 0 {
                 println!("yas parser start");
             }
-            let statements = match yas::parse_file(&filename) {
+            let statements = match yas::scan_file(&filename) {
                 Result::Ok(ss) => ss,
                 Result::Err(e) => panic!("{}", e),
             };
@@ -41,12 +42,11 @@ pub fn run(
     if log_level >= 0 {
         println!("yas coder start");
     }
-    let bytes = match yas::write_bytes(&statements) {
-        Result::Ok(bs) => bs,
-        Result::Err(e) => panic!("{}", e),
-    };
-    if log_level >= 0 {
-        println!("byte code: {0}", bytes.len());
+    let mut bytes: Vec<u8> = Vec::new();
+    bytes.resize(8000, 0x00);
+
+    if let Err(e) = yas::write_bytes(statements, &mut bytes) {
+        panic!("{}", e)
     }
 
     if command == "build" {
@@ -78,7 +78,6 @@ pub fn run(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,10 +85,11 @@ mod tests {
     fn run_file(filename: &str) -> u64 {
         let command = "run";
         let log_level = -1;
+        // let log_level = 2;
         let wrange = None;
+        // let wrange = Some((0, 256));
         run(filename, command, log_level, wrange)
     }
-
 
     #[test]
     fn test_plus() {

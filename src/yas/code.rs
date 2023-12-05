@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Register {
     RAX,
     RCX,
@@ -14,6 +14,7 @@ pub enum Register {
     R9,
     R10,
     R11,
+    RNONE,
 }
 
 impl FromStr for Register {
@@ -38,7 +39,7 @@ impl FromStr for Register {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Imm {
     Integer(u64),
     Label(String),
@@ -63,7 +64,7 @@ impl FromStr for Imm {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Dest {
     Integer(u64),
     Label(String),
@@ -84,7 +85,7 @@ impl FromStr for Dest {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ModDest {
     pub(crate) dest: Dest,
     pub(crate) register: Register,
@@ -126,7 +127,7 @@ impl FromStr for ModDest {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Code {
     Label(String),
     Halt,
@@ -140,7 +141,7 @@ pub enum Code {
     Andq(Register, Register),
     Orq(Register, Register),
     Mulq(Register, Register),
-    Divq(Register, Register),    
+    Divq(Register, Register),
     Jmp(Dest),
     // Jle(Dest),
     // Jl(Dest),

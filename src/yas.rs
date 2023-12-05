@@ -1,8 +1,8 @@
+mod byte_writer;
 pub(crate) mod code;
 mod ys_scanner;
-mod byte_writer;
 
-use std::{fs, f32::consts::E};
+use std::fs;
 
 use self::code::Code;
 
@@ -15,32 +15,18 @@ V ::= \${integer} | Label
 Label ::= [a-zA-Z]+
 */
 
-pub fn parse_file(filename: &str)  -> Result<Vec<Code>, String> {
+pub fn scan_file(filename: &str) -> Result<Vec<Code>, String> {
     let src = match fs::read_to_string(filename) {
         Err(e) => Err(format!("error at reading file: {}", e)),
-        Ok(s) => Ok(s)
+        Ok(s) => Ok(s),
     }?;
     match ys_scanner::Scanner::scan(&src) {
         Err(e) => Err(format!("error at scanning: {}", e.message)),
-        Ok(s) => Ok(s)
+        Ok(s) => Ok(s),
     }
-    
 }
 
-pub fn write_bytes(codes: &Vec<Code>) -> Result<Vec<u8>, String> {
-    byte_writer::code(codes)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_assemble() {
-        let input = "halt";
-        let expe = vec![0x00];
-        let calc = ys_scanner::Scanner::new().scan_src(input).unwrap();
-        let calc = write_bytes(&calc).unwrap();
-        assert_eq!(expe, calc);
-    }
+pub fn write_bytes(codes: Vec<Code>, bytes: &mut Vec<u8>) -> Result<(), String> {
+    byte_writer::ByteWriter::write(codes, bytes)
+        .map_err(|e| format!("error at writing bytes: {}", e.message))
 }
