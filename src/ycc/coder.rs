@@ -1,6 +1,6 @@
 use super::{node::*, INIT_SP};
 
-use crate::yas::code::{Dest, Imm, ModDest, Register, Code};
+use crate::yas::code::{Register, Code, Expr};
 
 pub struct Coder {
     label_count: u64,
@@ -21,8 +21,8 @@ impl Coder {
     fn code_prologue(&self) -> Vec<Code> {
         let mut codes = vec![
             // initialize stack pointer and meaning less base pointer
-            Code::Irmovq(Imm::Integer(INIT_SP), Register::RSP),
-            Code::Irmovq(Imm::Integer(INIT_SP + 10), Register::RBP),
+            Code::Irmovq(Register::RSP, Expr::Value(INIT_SP)),
+            Code::Irmovq(Register::RBP, Expr::Value(INIT_SP + 10)),
         ];
         let n = Box::new(Node::Call("main".to_string(), vec![]));
         codes.append(&mut self.code_expr(&n));
@@ -50,7 +50,7 @@ impl Coder {
                     // set new base pointer
                     Code::Rrmovq(Register::RSP, Register::RBP),
                     // allocate local variables  (deallocating is done in ret)
-                    Code::Irmovq(Imm::Integer(*lvars_size as u64), Register::RAX),
+                    Code::Irmovq(Register::RAX, Expr::Value(*lvars_size as u64)),
                     Code::Subq(Register::RAX, Register::RSP),
                     // stack = .. L2 L1 OB RE (LNs are local variable)
                 ];
@@ -70,9 +70,9 @@ impl Coder {
                 codes.append(&mut self.code_expr(cond));
                 codes.append(&mut vec![
                     Code::Popq(Register::RAX),
-                    Code::Irmovq(Imm::Integer(0), Register::RBX),
+                    Code::Irmovq(Register::RBX, Expr::Value(0)),
                     Code::Subq(Register::RBX, Register::RAX),
-                    Code::Je(Dest::Label(false_label.to_string())),
+                    Code::Je(Expr::Label(false_label.to_string())),
                 ]);
                 codes.append(&mut self.code_stmt(then));
                 codes.append(&mut vec![Code::Label(false_label.to_string())]);
@@ -86,13 +86,13 @@ impl Coder {
                 codes.append(&mut self.code_expr(cond));
                 codes.append(&mut vec![
                     Code::Popq(Register::RAX),
-                    Code::Irmovq(Imm::Integer(0), Register::RBX),
+                    Code::Irmovq(Register::RBX, Expr::Value(0)),
                     Code::Addq(Register::RBX, Register::RAX),
-                    Code::Je(Dest::Label(end_label.to_string())),
+                    Code::Je(Expr::Label(end_label.to_string())),
                 ]);
                 codes.append(&mut self.code_stmt(then));
                 codes.append(&mut vec![
-                    Code::Jmp(Dest::Label(begin_label.to_string())),
+                    Code::Jmp(Expr::Label(begin_label.to_string())),
                     Code::Label(end_label.to_string()),
                 ]);
                 codes
@@ -136,13 +136,13 @@ impl Coder {
         let mut xs = vec![];
         if x != 1 {
             xs.append(&mut vec![
-                Code::Irmovq(Imm::Integer(x), Register::RCX),
+                Code::Irmovq(Register::RCX, Expr::Value(x)),
                 Code::Mulq(Register::RCX, Register::RAX),
             ]);
         }
         if y != 1 {
             xs.append(&mut vec![
-                Code::Irmovq(Imm::Integer(y), Register::RCX),
+                Code::Irmovq(Register::RCX, Expr::Value(y)),
                 Code::Mulq(Register::RCX, Register::RBX),
             ]);
         }
@@ -165,10 +165,8 @@ impl Coder {
                     Code::Popq(Register::RAX), // (%rax) = %rbx
                     Code::Rmmovq(
                         Register::RBX,
-                        ModDest {
-                            dest: Dest::Integer(0),
-                            register: Register::RAX,
-                        },
+                        Register::RAX,
+                        Expr::Value(0),
                     ),
                     Code::Pushq(Register::RBX),
                 ]);
@@ -193,15 +191,15 @@ impl Coder {
                     BinaryOp::Mul => vec![Code::Mulq(Register::RBX, Register::RAX)],
                     BinaryOp::Div => vec![Code::Divq(Register::RBX, Register::RAX)],
                     BinaryOp::Eq => vec![
-                        Code::Irmovq(Imm::Integer(0), Register::RSI),
-                        Code::Irmovq(Imm::Integer(1), Register::RDI),
+                        Code::Irmovq(Register::RSI, Expr::Value(0)),
+                        Code::Irmovq(Register::RDI, Expr::Value(1)),
                         Code::Subq(Register::RBX, Register::RAX),
                         Code::Cmove(Register::RDI, Register::RSI),
                         Code::Rrmovq(Register::RSI, Register::RAX),
                     ],
                     BinaryOp::Less => vec![
-                        Code::Irmovq(Imm::Integer(0), Register::RSI),
-                        Code::Irmovq(Imm::Integer(1), Register::RDI),
+                        Code::Irmovq(Register::RSI, Expr::Value(0)),
+                        Code::Irmovq(Register::RDI, Expr::Value(1)),
                         Code::Subq(Register::RBX, Register::RAX),
                         Code::Cmovl(Register::RDI, Register::RSI),
                         Code::Rrmovq(Register::RSI, Register::RAX),
@@ -217,7 +215,7 @@ impl Coder {
                 let mut codes = self.code_expr(unode);
                 let mut ss = vec![
                     Code::Popq(Register::RBX),
-                    Code::Irmovq(Imm::Integer(0), Register::RAX),
+                    Code::Irmovq(Register::RAX, Expr::Value(0)),
                     Code::Subq(Register::RBX, Register::RAX), // 0 sub %rbx
                     Code::Pushq(Register::RAX),
                 ];
@@ -226,7 +224,7 @@ impl Coder {
             }
             Node::Num(n) => {
                 vec![
-                    Code::Irmovq(Imm::Integer(*n), Register::RBX),
+                    Code::Irmovq(Register::RBX, Expr::Value(*n)),
                     Code::Pushq(Register::RBX),
                 ]
             }
@@ -234,11 +232,9 @@ impl Coder {
                 let mut codes = self.code_lvar(node);
                 codes.push(Code::Popq(Register::RAX));
                 codes.push(Code::Mrmovq(
-                    ModDest {
-                        dest: Dest::Integer(0),
-                        register: Register::RAX,
-                    },
                     Register::RAX,
+                    Register::RAX,
+                    Expr::Value(0),
                 ));
                 codes.push(Code::Pushq(Register::RAX));
                 codes
@@ -248,11 +244,9 @@ impl Coder {
                 let mut codes = self.code_expr(expr);
                 codes.push(Code::Popq(Register::RAX));
                 codes.push(Code::Mrmovq(
-                    ModDest {
-                        dest: Dest::Integer(0),
-                        register: Register::RAX,
-                    },
                     Register::RAX,
+                    Register::RAX,
+                    Expr::Value(0),
                 ));
                 codes.push(Code::Pushq(Register::RAX));
                 codes
@@ -270,7 +264,7 @@ impl Coder {
                 }
                 // stack = .. .. .. a1 a2   (a1 and a2 are argument)
                 // call
-                codes.push(Code::Call(Dest::Label(name.to_string())));
+                codes.push(Code::Call(Expr::Label(name.to_string())));
                 // stack = .. .. .. a1 a2
                 // pop args on stack
                 for _ in 0..args.len() {
@@ -296,7 +290,7 @@ impl Coder {
                 let abs_offset = offset.abs() as u64;
                 vec![
                     // FIXME: support Irmovq for negative integer
-                    Code::Irmovq(Imm::Integer(abs_offset), Register::RAX),
+                    Code::Irmovq(Register::RAX, Expr::Value(abs_offset)),
                     Code::Rrmovq(Register::RBP, Register::RBX),
                     if *offset >= 0 {
                         Code::Addq(Register::RAX, Register::RBX)
@@ -314,7 +308,7 @@ impl Coder {
                 codes.append(&mut vec![
                     Code::Popq(Register::RAX), // %rax: address of a[0]
                     Code::Popq(Register::RBX), // %rbx: index
-                    Code::Irmovq(Imm::Integer(ty.size() as u64), Register::RCX),
+                    Code::Irmovq(Register::RCX, Expr::Value(ty.size() as u64)),
                     Code::Mulq(Register::RCX, Register::RBX),
                     Code::Subq(Register::RBX, Register::RAX),
                     Code::Pushq(Register::RAX),
@@ -330,7 +324,7 @@ impl Coder {
 mod tests {
     use super::super::node::test_utils::*;
     use super::*;
-    use crate::yas::code::{Imm, Register, Code};
+    use crate::yas::code::{Register, Code};
 
     #[test]
     fn test_code() {
@@ -340,9 +334,9 @@ mod tests {
         let p = Prog::new(block(vec![a]));
         let mut expe = coder.code_prologue();
         expe.append(&mut vec![
-            Code::Irmovq(Imm::Integer(23), Register::RBX),
+            Code::Irmovq(Register::RBX, Expr::Value(23)),
             Code::Pushq(Register::RBX),
-            Code::Irmovq(Imm::Integer(34), Register::RBX),
+            Code::Irmovq(Register::RBX, Expr::Value(34)),
             Code::Pushq(Register::RBX),
             Code::Popq(Register::RBX),
             Code::Popq(Register::RAX),

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, mem};
 
-use super::code::{Code, Dest, Imm, Register};
+use super::code::{Code, Register, Expr};
 
 pub struct ByteWriter {
     codes: Vec<Code>,
@@ -84,20 +84,20 @@ impl ByteWriter {
             Code::Cmove(ra, rb) => self.write_fn_ra_rb(0x23, &ra, &rb),
             Code::Cmovne(ra, rb) => self.write_fn_ra_rb(0x24, &ra, &rb),
 
-            Code::Irmovq(v, rb) => {
+            Code::Irmovq(rb, v) => {
                 self.write_byte(0x30)?;
                 self.write_registers(&Register::RNONE, &rb)?;
-                self.write_imm(&v)
+                self.write_expr(&v)
             }
-            Code::Rmmovq(ra, m) => {
+            Code::Rmmovq(ra, rb, v) => {
                 self.write_byte(0x40)?;
-                self.write_registers(&ra, &m.register)?;
-                self.write_dest(&m.dest)
+                self.write_registers(&ra, &rb)?;
+                self.write_expr(&v)
             }
-            Code::Mrmovq(a, ra) => {
+            Code::Mrmovq(ra, rb, v) => {
                 self.write_byte(0x50)?;
-                self.write_registers(&ra, &a.register)?;
-                self.write_dest(&a.dest)
+                self.write_registers(&ra, &rb)?;
+                self.write_expr(&v)
             }
 
             Code::Addq(ra, rb) => self.write_fn_ra_rb(0x60, &ra, &rb),
@@ -107,13 +107,13 @@ impl ByteWriter {
             Code::Mulq(ra, rb) => self.write_fn_ra_rb(0x64, &ra, &rb),
             Code::Divq(ra, rb) => self.write_fn_ra_rb(0x65, &ra, &rb),
 
-            Code::Jmp(d) => self.write_fn_d(0x70, &d),
+            Code::Jmp(d) => self.write_fn_expr(0x70, &d),
             //     // Statement::Jle(d) => f_v(0x71, d, symbol_table),
             //     // Statement::Jl(d) => f_v(0x72, d, symbol_table),
-            Code::Je(d) => self.write_fn_d(0x73, &d),
-            Code::Jne(d) => self.write_fn_d(0x74, &d),
+            Code::Je(d) => self.write_fn_expr(0x73, &d),
+            Code::Jne(d) => self.write_fn_expr(0x74, &d),
 
-            Code::Call(d) => self.write_fn_d(0x80, &d),
+            Code::Call(d) => self.write_fn_expr(0x80, &d),
             Code::Ret => self.write_byte(0x90),
             Code::Pushq(ra) => self.write_fn_ra_rb(0xA0, &ra, &Register::RNONE),
             Code::Popq(ra) => self.write_fn_ra_rb(0xB0, &ra, &Register::RNONE),
@@ -130,8 +130,8 @@ impl ByteWriter {
 
             Code::Rrmovq(_, _) => 2,
             Code::Irmovq(_, _) => 10,
-            Code::Rmmovq(_, _) => 10,
-            Code::Mrmovq(_, _) => 10,
+            Code::Rmmovq(_, _, _) => 10,
+            Code::Mrmovq(_, _, _) => 10,
 
             Code::Addq(_, _) => 2,
             Code::Subq(_, _) => 2,
@@ -180,9 +180,9 @@ impl ByteWriter {
         self.write_registers(ra, rb)
     }
 
-    fn write_fn_d(&mut self, x: u8, d: &Dest) -> Res<()> {
+    fn write_fn_expr(&mut self, x: u8, v: &Expr) -> Res<()> {
         self.write_byte(x)?;
-        self.write_dest(d)
+        self.write_expr(v)
     }
 
     fn write_registers(&mut self, ra: &Register, rb: &Register) -> Res<()> {
@@ -207,21 +207,12 @@ impl ByteWriter {
         self.write_byte(x)
     }
 
-    fn write_imm(&mut self, v: &Imm) -> Res<()> {
-        let i: u64 = match v {
-            Imm::Integer(i) => *i,
-            Imm::Label(s) => self.find_symbol(s)?,
+    fn write_expr(&mut self, v: &Expr) -> Res<()> {
+        let i = match v {
+            Expr::Value(i) => *i,
+            Expr::Label(s) => self.find_symbol(s)?,
         };
         self.write_quad(i)?;
-        Ok(())
-    }
-
-    fn write_dest(&mut self, d: &Dest) -> Res<()> {
-        let x: u64 = match d {
-            Dest::Integer(i) => *i,
-            Dest::Label(s) => self.find_symbol(s)?,
-        };
-        self.write_quad(x)?;
         Ok(())
     }
 
@@ -235,8 +226,6 @@ impl ByteWriter {
 
 #[cfg(test)]
 mod tests {
-    use crate::yas::code::ModDest;
-
     use super::*;
 
     #[test]
@@ -246,10 +235,8 @@ mod tests {
         let codes = vec![
             Code::Rmmovq(
                 Register::RAX,
-                ModDest {
-                    register: Register::RSP,
-                    dest: Dest::Integer(7),
-                },
+                Register::RSP,
+                Expr::Value(7),
             ),
             Code::Subq(Register::RBX, Register::RCX),
         ];
@@ -268,7 +255,7 @@ mod tests {
             Code::Label("orange".to_string()),
             Code::Rrmovq(Register::RAX, Register::RCX),
             Code::Label("apple".to_string()),
-            Code::Irmovq(Imm::Integer(100), Register::RAX),
+            Code::Irmovq(Register::RAX, Expr::Value(100)),
             Code::Label("peach".to_string()),
         ];
         let tab = ByteWriter::build_symbol_table(&codes);

@@ -1,4 +1,4 @@
-use super::code::{Code, Dest, Imm, ModDest, Register};
+use super::code::{Code, Register, Expr};
 
 #[derive(Debug, PartialEq)]
 pub struct ScanError {
@@ -58,23 +58,25 @@ impl Scanner {
                 self.scan_register(ra)?,
                 self.scan_register(rb)?,
             )),
-            ["irmovq", v, rb] => Ok(Code::Irmovq(self.scan_value(v)?, self.scan_register(rb)?)),
-            ["rmmovq", ra, m] => Ok(Code::Rmmovq(
-                self.scan_register(ra)?,
-                self.scan_mod_dest(m)?,
-            )),
-            ["mrmovq", m, ra] => Ok(Code::Mrmovq(
-                self.scan_mod_dest(m)?,
-                self.scan_register(ra)?,
-            )),
+            ["irmovq", v, rb] => Ok(Code::Irmovq(self.scan_register(rb)?, self.scan_expr_as_imm(v)?)),
+            ["rmmovq", ra, addr] => {
+                let ra = self.scan_register(ra)?;
+                let (rb, expr) = self.scan_addr(addr)?;
+                Ok(Code::Rmmovq(ra, rb, expr))
+            },
+            ["mrmovq", addr, ra] => {
+                let ra = self.scan_register(ra)?;
+                let (rb, expr) = self.scan_addr(addr)?;
+                Ok(Code::Mrmovq(ra, rb, expr))
+            },
             ["addq", ra, rb] => Ok(Code::Addq(self.scan_register(ra)?, self.scan_register(rb)?)),
             ["subq", ra, rb] => Ok(Code::Subq(self.scan_register(ra)?, self.scan_register(rb)?)),
             ["andq", ra, rb] => Ok(Code::Andq(self.scan_register(ra)?, self.scan_register(rb)?)),
             ["orq", ra, rb] => Ok(Code::Orq(self.scan_register(ra)?, self.scan_register(rb)?)),
             ["mulq", ra, rb] => Ok(Code::Mulq(self.scan_register(ra)?, self.scan_register(rb)?)),
             ["divq", ra, rb] => Ok(Code::Divq(self.scan_register(ra)?, self.scan_register(rb)?)),
-            ["je", m] => Ok(Code::Je(self.scan_dest(m)?)),
-            ["jne", m] => Ok(Code::Jne(self.scan_dest(m)?)),
+            ["je", m] => Ok(Code::Je(self.scan_expr(m)?)),
+            ["jne", m] => Ok(Code::Jne(self.scan_expr(m)?)),
             ["cmove", ra, rb] => Ok(Code::Cmove(
                 self.scan_register(ra)?,
                 self.scan_register(rb)?,
@@ -83,7 +85,7 @@ impl Scanner {
                 self.scan_register(ra)?,
                 self.scan_register(rb)?,
             )),
-            ["call", m] => Ok(Code::Call(self.scan_dest(m)?)),
+            ["call", m] => Ok(Code::Call(self.scan_expr(m)?)),
             ["ret"] => Ok(Code::Ret),
             ["pushq", ra] => Ok(Code::Pushq(self.scan_register(ra)?)),
             ["popq", ra] => Ok(Code::Popq(self.scan_register(ra)?)),
@@ -92,25 +94,36 @@ impl Scanner {
         }
     }
 
-    fn scan_value(&self, input: &str) -> Result<Imm, ScanError> {
-        println!("scan_value");
-        match input.parse() {
-            Ok(i) => Ok(i),
-            Err(_) => self.error(format!("invalid Imm: {}", input)),
+    fn scan_addr(&self, input: &str) -> Result<(Register, Expr), ScanError> {
+        // example: 100(%rbx)
+        let input = input.trim();
+        let parts: Vec<&str> = input.split(|c| c == '(' || c == ')').collect();
+        match parts.as_slice() {
+            [offset, r, _] => {
+                let expr = self.scan_expr(offset)?;
+                let register = self.scan_register(r)?;
+                Ok((register, expr))
+            }
+            _ => self.error(format!("invalid address: {}", input))
         }
     }
 
-    fn scan_dest(&self, input: &str) -> Result<Dest, ScanError> {
-        match input.parse() {
-            Ok(i) => Ok(Dest::Integer(i)),
-            Err(_) => Ok(Dest::Label(input.to_string())),
+    fn scan_expr_as_imm(&self, input: &str) -> Result<Expr, ScanError> {
+        if !input[0..1].eq("$") {
+            return self.error(format!("$ is missing: {}", input));            
         }
+        let input = &input[1..];
+        self.scan_expr(input)
     }
 
-    fn scan_mod_dest(&self, input: &str) -> Result<ModDest, ScanError> {
-        match input.parse() {
-            Ok(i) => Ok(i),
-            Err(e) => self.error(format!("invalid mod dest: {}", e)),
+    fn scan_expr(&self, input: &str) -> Result<Expr, ScanError> {
+        let num_str = input.trim();
+        if let Ok(num) = num_str.parse::<u64>() {
+            Ok(Expr::Value(num))
+        } else if num_str.chars().all(char::is_alphabetic) {
+            Ok(Expr::Label(num_str.to_string()))
+        } else {
+            self.error(format!("invalid Expr: {}", input))
         }
     }
 
@@ -142,7 +155,7 @@ impl Scanner {
 
 #[cfg(test)]
 mod tests {
-    use crate::yas::code::{Dest, Imm, ModDest, Register};
+    use crate::yas::code::Register;
 
     use super::*;
 
@@ -176,20 +189,16 @@ mod tests {
                 Code::Halt,
                 Code::Nop,
                 Code::Rrmovq(Register::RAX, Register::RCX),
-                Code::Irmovq(Imm::Integer(100), Register::RAX),
+                Code::Irmovq(Register::RAX, Expr::Value(100)),
                 Code::Mrmovq(
-                    ModDest {
-                        dest: Dest::Integer(10),
-                        register: Register::RBX
-                    },
                     Register::RAX,
+                    Register::RBX,
+                    Expr::Value(10),
                 ),
                 Code::Rmmovq(
                     Register::RAX,
-                    ModDest {
-                        dest: Dest::Integer(12),
-                        register: Register::RBX
-                    },
+                    Register::RBX,
+                    Expr::Value(12),
                 ),
                 Code::Cmove(Register::RAX, Register::RBX),
                 Code::Cmovne(Register::RAX, Register::RBX),
@@ -199,10 +208,10 @@ mod tests {
                 Code::Orq(Register::RAX, Register::R11),
                 Code::Mulq(Register::R9, Register::R10),
                 Code::Divq(Register::RAX, Register::R11),
-                Code::Je(Dest::Integer(100)),
-                Code::Je(Dest::Label(String::from("done"))),
-                Code::Jne(Dest::Integer(100)),
-                Code::Call(Dest::Integer(100)),
+                Code::Je(Expr::Value(100)),
+                Code::Je(Expr::Label(String::from("done"))),
+                Code::Jne(Expr::Value(100)),
+                Code::Call(Expr::Value(100)),
                 Code::Pushq(Register::RAX),
                 Code::Popq(Register::RAX),
             ]),
