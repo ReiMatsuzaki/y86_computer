@@ -45,9 +45,10 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
     let mut bytes: Vec<u8> = Vec::new();
     bytes.resize(8000, 0x00);
 
-    if let Err(e) = yas::write_bytes(statements, &mut bytes) {
-        panic!("{}", e)
-    }
+    let bytes = match yas::write_bytes(statements, bytes) {
+        Ok(a) => a,
+        Err(e) => panic!("{}", e),
+    };
 
     if command == "build" {
         println!("\nbytes:");

@@ -1,29 +1,33 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
 use super::code::{Code, Dest, Imm, Register};
 
 pub struct ByteWriter {
     codes: Vec<Code>,
+    bytes: Vec<u8>,
     symbol_table: HashMap<String, u64>,
     pos_code: usize,
     pos_byte: usize,
 }
 
+#[derive(Debug)]
 pub struct ByteWriteError {
     pub message: String,
     pub pos: usize,
 }
 
 impl ByteWriter {
-    pub fn write(codes: Vec<Code>, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
-        let mut writer = ByteWriter::new(codes);
-        writer.write_all(bytes)
+    pub fn write(codes: Vec<Code>, bytes: Vec<u8>) -> Result<Vec<u8>, ByteWriteError> {
+        let mut writer = ByteWriter::new(codes, bytes);
+        writer.write_all()?;
+        Ok(mem::take(&mut writer.bytes))
     }
 
-    pub fn new(codes: Vec<Code>) -> ByteWriter {
+    pub fn new(codes: Vec<Code>, bytes: Vec<u8>) -> ByteWriter {
         let symbol_table = Self::build_symbol_table(&codes);
         ByteWriter {
             codes,
+            bytes,
             symbol_table,
             pos_code: 0,
             pos_byte: 0,
@@ -44,9 +48,9 @@ impl ByteWriter {
         }
     }
 
-    pub fn write_all(&mut self, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
-        while (self.pos_code < self.codes.len()) && (self.pos_byte < bytes.len()) {
-            self.write_code(bytes)?;
+    pub fn write_all(&mut self) -> Result<(), ByteWriteError> {
+        while (self.pos_code < self.codes.len()) && (self.pos_byte < self.bytes.len()) {
+            self.write_code()?;
         }
         Result::Ok(())
     }
@@ -67,50 +71,50 @@ impl ByteWriter {
         (*self.codes.get(self.pos_code).unwrap()).clone()
     }
 
-    fn write_code(&mut self, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+    fn write_code(&mut self) -> Result<(), ByteWriteError> {
         let res = match self.get_code() {
             Code::Label(_) => Ok(()),
-            Code::Halt => self.write_byte(0x00, bytes),
-            Code::Nop => self.write_byte(0x10, bytes),
+            Code::Halt => self.write_byte(0x00),
+            Code::Nop => self.write_byte(0x10),
 
-            Code::Rrmovq(ra, rb) => self.write_fn_ra_rb(0x20, &ra, &rb, bytes),
-            Code::Cmovl(ra, rb) => self.write_fn_ra_rb(0x22, &ra, &rb, bytes),
-            Code::Cmove(ra, rb) => self.write_fn_ra_rb(0x23, &ra, &rb, bytes),
-            Code::Cmovne(ra, rb) => self.write_fn_ra_rb(0x24, &ra, &rb, bytes),
+            Code::Rrmovq(ra, rb) => self.write_fn_ra_rb(0x20, &ra, &rb),
+            Code::Cmovl(ra, rb) => self.write_fn_ra_rb(0x22, &ra, &rb),
+            Code::Cmove(ra, rb) => self.write_fn_ra_rb(0x23, &ra, &rb),
+            Code::Cmovne(ra, rb) => self.write_fn_ra_rb(0x24, &ra, &rb),
 
             Code::Irmovq(v, rb) => {
-                self.write_byte(0x30, bytes)?;
-                self.write_registers(&Register::RNONE, &rb, bytes)?;
-                self.write_imm(&v, bytes)
+                self.write_byte(0x30)?;
+                self.write_registers(&Register::RNONE, &rb)?;
+                self.write_imm(&v)
             }
             Code::Rmmovq(ra, m) => {
-                self.write_byte(0x40, bytes)?;
-                self.write_registers(&ra, &m.register, bytes)?;
-                self.write_dest(&m.dest, bytes)
+                self.write_byte(0x40)?;
+                self.write_registers(&ra, &m.register)?;
+                self.write_dest(&m.dest)
             }
             Code::Mrmovq(a, ra) => {
-                self.write_byte(0x50, bytes)?;
-                self.write_registers(&ra, &a.register, bytes)?;
-                self.write_dest(&a.dest, bytes)
+                self.write_byte(0x50)?;
+                self.write_registers(&ra, &a.register)?;
+                self.write_dest(&a.dest)
             }
 
-            Code::Addq(ra, rb) => self.write_fn_ra_rb(0x60, &ra, &rb, bytes),
-            Code::Subq(ra, rb) => self.write_fn_ra_rb(0x61, &ra, &rb, bytes),
-            Code::Andq(ra, rb) => self.write_fn_ra_rb(0x62, &ra, &rb, bytes),
-            Code::Orq(ra, rb) => self.write_fn_ra_rb(0x63, &ra, &rb, bytes),
-            Code::Mulq(ra, rb) => self.write_fn_ra_rb(0x64, &ra, &rb, bytes),
-            Code::Divq(ra, rb) => self.write_fn_ra_rb(0x65, &ra, &rb, bytes),
+            Code::Addq(ra, rb) => self.write_fn_ra_rb(0x60, &ra, &rb),
+            Code::Subq(ra, rb) => self.write_fn_ra_rb(0x61, &ra, &rb),
+            Code::Andq(ra, rb) => self.write_fn_ra_rb(0x62, &ra, &rb),
+            Code::Orq(ra, rb) => self.write_fn_ra_rb(0x63, &ra, &rb),
+            Code::Mulq(ra, rb) => self.write_fn_ra_rb(0x64, &ra, &rb),
+            Code::Divq(ra, rb) => self.write_fn_ra_rb(0x65, &ra, &rb),
 
-            Code::Jmp(d) => self.write_fn_d(0x70, &d, bytes),
+            Code::Jmp(d) => self.write_fn_d(0x70, &d),
             //     // Statement::Jle(d) => f_v(0x71, d, symbol_table),
             //     // Statement::Jl(d) => f_v(0x72, d, symbol_table),
-            Code::Je(d) => self.write_fn_d(0x73, &d, bytes),
-            Code::Jne(d) => self.write_fn_d(0x74, &d, bytes),
+            Code::Je(d) => self.write_fn_d(0x73, &d),
+            Code::Jne(d) => self.write_fn_d(0x74, &d),
 
-            Code::Call(d) => self.write_fn_d(0x80, &d, bytes),
-            Code::Ret => self.write_byte(0x90, bytes),
-            Code::Pushq(ra) => self.write_fn_ra_rb(0xA0, &ra, &Register::RNONE, bytes),
-            Code::Popq(ra) => self.write_fn_ra_rb(0xB0, &ra, &Register::RNONE, bytes),
+            Code::Call(d) => self.write_fn_d(0x80, &d),
+            Code::Ret => self.write_byte(0x90),
+            Code::Pushq(ra) => self.write_fn_ra_rb(0xA0, &ra, &Register::RNONE),
+            Code::Popq(ra) => self.write_fn_ra_rb(0xB0, &ra, &Register::RNONE),
         };
         self.pos_code += 1;
         res
@@ -151,19 +155,19 @@ impl ByteWriter {
         }
     }
 
-    fn write_byte(&mut self, x: u8, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
-        if self.pos_byte >= bytes.len() {
+    fn write_byte(&mut self, x: u8) -> Result<(), ByteWriteError> {
+        if self.pos_byte >= self.bytes.len() {
             return self.error(format!("byte length is too short: {}", self.pos_byte));
         }
-        bytes[self.pos_byte] = x;
+        self.bytes[self.pos_byte] = x;
         self.pos_byte += 1;
         Result::Ok(())
     }
 
-    fn write_quad(&mut self, x: u64, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+    fn write_quad(&mut self, x: u64) -> Result<(), ByteWriteError> {
         let xs = x.to_be_bytes();
         for i in 0..8 {
-            bytes[self.pos_byte + i] = xs[7 - i];
+            self.bytes[self.pos_byte + i] = xs[7 - i];
         }
         self.pos_byte += 8;
         Ok(())
@@ -174,23 +178,17 @@ impl ByteWriter {
         x: u8,
         ra: &Register,
         rb: &Register,
-        bytes: &mut Vec<u8>,
     ) -> Result<(), ByteWriteError> {
-        self.write_byte(x, bytes)?;
-        self.write_registers(ra, rb, bytes)
+        self.write_byte(x)?;
+        self.write_registers(ra, rb)
     }
 
-    fn write_fn_d(&mut self, x: u8, d: &Dest, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
-        self.write_byte(x, bytes)?;
-        self.write_dest(d, bytes)
+    fn write_fn_d(&mut self, x: u8, d: &Dest) -> Result<(), ByteWriteError> {
+        self.write_byte(x)?;
+        self.write_dest(d)
     }
 
-    fn write_registers(
-        &mut self,
-        ra: &Register,
-        rb: &Register,
-        bytes: &mut Vec<u8>,
-    ) -> Result<(), ByteWriteError> {
+    fn write_registers(&mut self, ra: &Register, rb: &Register) -> Result<(), ByteWriteError> {
         fn f(r: &Register) -> u8 {
             match r {
                 Register::RAX => 0x00,
@@ -209,24 +207,24 @@ impl ByteWriter {
             }
         }
         let x = (f(ra) << 4) + f(rb);
-        self.write_byte(x, bytes)
+        self.write_byte(x)
     }
 
-    fn write_imm(&mut self, v: &Imm, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+    fn write_imm(&mut self, v: &Imm) -> Result<(), ByteWriteError> {
         let i: u64 = match v {
             Imm::Integer(i) => *i,
             Imm::Label(s) => self.find_symbol(s)?,
         };
-        self.write_quad(i, bytes)?;
+        self.write_quad(i)?;
         Ok(())
     }
 
-    fn write_dest(&mut self, d: &Dest, bytes: &mut Vec<u8>) -> Result<(), ByteWriteError> {
+    fn write_dest(&mut self, d: &Dest) -> Result<(), ByteWriteError> {
         let x: u64 = match d {
             Dest::Integer(i) => *i,
             Dest::Label(s) => self.find_symbol(s)?,
         };
-        self.write_quad(x, bytes)?;
+        self.write_quad(x)?;
         Ok(())
     }
 
@@ -258,7 +256,7 @@ mod tests {
             ),
             Code::Subq(Register::RBX, Register::RCX),
         ];
-        let _ = ByteWriter::write(codes, &mut memory);
+        let memory = ByteWriter::write(codes, memory).unwrap();
         let expe: Vec<u8> = vec![
             0x40, 0x04, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x61, 0x31, 0x00, 0, 0, 0, 0, 0, 0, 0,
         ];

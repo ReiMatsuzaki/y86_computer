@@ -26,7 +26,7 @@ pub fn scan_file(filename: &str) -> Result<Vec<Code>, String> {
     }
 }
 
-pub fn write_bytes(codes: Vec<Code>, bytes: &mut Vec<u8>) -> Result<(), String> {
+pub fn write_bytes(codes: Vec<Code>, bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     byte_writer::ByteWriter::write(codes, bytes)
         .map_err(|e| format!("error at writing bytes: {}", e.message))
 }
