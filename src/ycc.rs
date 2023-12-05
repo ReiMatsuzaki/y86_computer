@@ -7,7 +7,7 @@ mod coder;
 
 use std::{process, fs};
 
-use crate::yas::Code;
+use crate::yas::code::Code;
 
 pub const INIT_SP: u64 = 2816; // initial stack pointer
 

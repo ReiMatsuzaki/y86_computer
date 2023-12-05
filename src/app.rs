@@ -41,7 +41,7 @@ pub fn run(
     if log_level >= 0 {
         println!("yas coder start");
     }
-    let bytes = match yas::code(&statements) {
+    let bytes = match yas::write_bytes(&statements) {
         Result::Ok(bs) => bs,
         Result::Err(e) => panic!("{}", e),
     };

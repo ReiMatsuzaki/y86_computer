@@ -1,6 +1,6 @@
 use super::{node::*, INIT_SP};
 
-use crate::yas::{Dest, Imm, ModDest, Register, Code};
+use crate::yas::code::{Dest, Imm, ModDest, Register, Code};
 
 pub struct Coder {
     label_count: u64,
@@ -166,7 +166,7 @@ impl Coder {
                     Code::Rmmovq(
                         Register::RBX,
                         ModDest {
-                            dest: crate::yas::Dest::Integer(0),
+                            dest: Dest::Integer(0),
                             register: Register::RAX,
                         },
                     ),
@@ -235,7 +235,7 @@ impl Coder {
                 codes.push(Code::Popq(Register::RAX));
                 codes.push(Code::Mrmovq(
                     ModDest {
-                        dest: crate::yas::Dest::Integer(0),
+                        dest: Dest::Integer(0),
                         register: Register::RAX,
                     },
                     Register::RAX,
@@ -249,7 +249,7 @@ impl Coder {
                 codes.push(Code::Popq(Register::RAX));
                 codes.push(Code::Mrmovq(
                     ModDest {
-                        dest: crate::yas::Dest::Integer(0),
+                        dest: Dest::Integer(0),
                         register: Register::RAX,
                     },
                     Register::RAX,
@@ -330,7 +330,7 @@ impl Coder {
 mod tests {
     use super::super::node::test_utils::*;
     use super::*;
-    use crate::yas::{Imm, Register, Code};
+    use crate::yas::code::{Imm, Register, Code};
 
     #[test]
     fn test_code() {
