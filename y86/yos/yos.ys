@@ -1,0 +1,3 @@
+.pos 0xF000
+  .quad syscall_1
+  .quad syscall_2
