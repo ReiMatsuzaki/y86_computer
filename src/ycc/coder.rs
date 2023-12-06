@@ -331,7 +331,7 @@ mod tests {
         let mut coder = Coder::new();
         // a = 1 + 2
         let a = add(num(23), num(34));
-        let p = Prog::new(block(vec![a]));
+        let p = Prog::new(block(vec![a]), vec![]);
         let mut expe = coder.code_prologue();
         expe.append(&mut vec![
             Code::Irmovq(Register::RBX, Expr::Value(23)),

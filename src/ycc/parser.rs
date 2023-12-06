@@ -22,12 +22,13 @@ use super::token::Token;
 pub struct Parser {
     pub(crate) tokens: Vec<Token>,
     pos: usize,
-    args: Vec<Variable>,
-    lvars: Vec<Variable>,
+    args: Vec<LocalVar>,
+    lvars: Vec<LocalVar>,
+    gvars: Vec<GlobalVar>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct Variable {
+struct LocalVar {
     name: String,
     offset: i64,
     ty: Type,
@@ -47,6 +48,7 @@ impl Parser {
             pos: 0,
             args: vec![],
             lvars: vec![],
+            gvars: vec![],
         }
     }
 
@@ -108,45 +110,76 @@ impl Parser {
     }
 
     fn parse_prog(&mut self) -> Result<Prog, ParserError> {
-        let mut stmts = vec![];
-        while self.pos < self.tokens.len() {
-            stmts.push(self.parse_deffun()?);
-        }
-        let node = Box::new(Node::Block(stmts));
-        Ok(Prog::new(node))
+        let node = self.parse_global_defs()?;
+        // FIXME: avoid clone
+        Ok(Prog::new(node, self.gvars.clone()))
     }
 
-    fn parse_deffun(&mut self) -> Result<Box<Node>, ParserError> {
-        self.expect(&Token::Int)?;
-        // FIXME: refactor using self.expect_id()
-        match self.tokens.get(self.pos) {
-            Some(Token::Id(id)) => {
-                let name = String::from(id);
-                self.pos += 1;
-                self.parse_argvar()?;
-                self.expect(&Token::Op('{'))?;
-                self.parse_defvar()?;
-                let mut block = vec![];
-                while let Some(&token) = self.tokens.get(self.pos).as_ref() {
-                    match token {
-                        Token::Op('}') => {
-                            self.pos += 1;
-                            break;
-                        }
-                        _ => {
-                            let n = self.parse_stmt();
-                            block.push(n?);
-                        }
-                    }
+    fn parse_global_defs(&mut self) -> Result<Box<Node>, ParserError> {
+        let mut nodes = vec![];
+        while self.pos < self.tokens.len() {
+            let ty = self.expect_type()?;
+            let id = self.expect_id()?;
+            match self.tokens.get(self.pos) {
+                Some(Token::Op('(')) => {
+                    // function
+                    self.parse_argvar()?;
+                    self.expect(&Token::Op('{'))?;
+                    self.lvars = vec![];
+                    self.parse_local_defs()?;
+                    // current token is not '{' so it is not block.
+                    // extract block code to function and call it
+                    let block = self.parse_stmts()?;
+                    self.expect(&Token::Op('}'))?;
+                    let lvar_bytes = self.lvars.iter().map(|v| v.ty.size()).sum();
+                    let node = Box::new(Node::DefFun(id, block, lvar_bytes));
+                    nodes.push(node);
                 }
-                let block = Box::new(Node::Block(block));
-                let lvar_bytes = self.lvars.iter().map(|v| v.ty.size()).sum();
-                Ok(Box::new(Node::DefFun(name, block, lvar_bytes)))
+                _ => {
+                    // variable
+                    let ty = match self.tokens.get(self.pos) {
+                        Some(Token::Op(';')) => {
+                            self.pos += 1;
+                            ty
+                        }                        
+                        Some(Token::Op('[')) => {
+                            self.pos += 1;
+                            let n = self.expect_num()?;
+                            self.expect(&Token::Op(']'))?;
+                            self.expect(&Token::Op(';'))?;
+                            Type::Ary(Box::new(ty), n as usize)
+                        }
+                        _ => return self.error("unexpected token."),
+                    };
+                    self.add_gvars(id, ty)?;
+                }
             }
-            // FIXME: remove panic
-            Some(_) => panic!("invalid token, pos={0}", self.pos),
-            None => panic!("token not found. pos={}", self.pos),
-        }
+        }       
+        Ok(Box::new(Node::Block(nodes)))
+    }
+
+    // FIXME: duplicated code
+    fn parse_local_defs(&mut self) -> Result<(), ParserError> {
+        while let Ok(ty) = self.expect_type() {
+            let id = self.expect_id()?;
+            // variable
+            let ty = match self.tokens.get(self.pos) {
+                Some(Token::Op(';')) => {
+                    self.pos += 1;
+                    ty
+                }                        
+                Some(Token::Op('[')) => {
+                    self.pos += 1;
+                    let n = self.expect_num()?;
+                    self.expect(&Token::Op(']'))?;
+                    self.expect(&Token::Op(';'))?;
+                            Type::Ary(Box::new(ty), n as usize)
+                        }
+                        _ => return self.error("unexpected token."),
+                    };
+            self.add_lvars(id, ty)?;
+        }       
+        Ok(())
     }
 
     fn parse_argvar(&mut self) -> Result<(), ParserError> {
@@ -160,7 +193,7 @@ impl Parser {
             let ty = self.expect_type()?;
             let name = self.expect_id()?;
             let offset = 16 + self.args.iter().map(|v| v.ty.size() as i64).sum::<i64>();
-            self.args.push(Variable { name, offset, ty });
+            self.args.push(LocalVar { name, offset, ty });
             match self.tokens.get(self.pos) {
                 Some(Token::Op(')')) => {
                     self.pos += 1;
@@ -175,36 +208,12 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_defvar(&mut self) -> Result<(), ParserError> {
-        self.lvars = vec![];
-        while let Ok(ty) = self.expect_type() {
-            let id = self.expect_id()?;
-            match self.tokens.get(self.pos) {
-                Some(Token::Op(';')) => {
-                    self.pos += 1;
-                    self.add_lvars(id.to_string(), ty)?;
-                }
-                Some(Token::Op('[')) => {
-                    self.pos += 1;
-                    // FIXME: refactor self.expect_num()
-                    let n = self.expect_num()?;
-                    self.expect(&Token::Op(']'))?;
-                    self.expect(&Token::Op(';'))?;
-                    let ty = Type::Ary(Box::new(ty), n as usize);
-                    self.add_lvars(id.to_string(), ty)?;
-                }
-                _ => return self.error("unexpected token in defvar."),
-            }
-        }
-        Ok(())
-    }
-
     fn add_lvars(&mut self, id: String, ty: Type) -> Result<(), ParserError> {
         if self.lvars.iter().any(|v| v.name.eq(&id)) {
             return self.error("variable already defined");
         }
         let offset = -8 - self.lvars.iter().map(|v| v.ty.size() as i64).sum::<i64>();
-        let v = Variable {
+        let v = LocalVar {
             name: id.to_string(),
             offset,
             ty: ty.clone(),
@@ -213,22 +222,34 @@ impl Parser {
         Ok(())
     }
 
+    fn add_gvars(&mut self, id: String, ty: Type) -> Result<(), ParserError> {
+        if self.lvars.iter().any(|v| v.name.eq(&id)) {
+            return self.error(&format!("global variable already defined. id={}", id));
+        }
+        self.gvars.push(GlobalVar {
+            name: id.to_string(),
+            ty: ty.clone(),
+            label: id.to_string(), // change label
+        });
+        Ok(())
+    }
+
+    fn parse_stmts(&mut self) -> Result<Box<Node>, ParserError> {
+        let mut stmts = vec![];
+        while self.tokens.get(self.pos) != Some(&Token::Op('}')) {
+            let stmt = self.parse_stmt()?;
+            stmts.push(stmt);
+        }
+        Ok(Box::new(Node::Block(stmts)))
+    }
+
     fn parse_stmt(&mut self) -> Result<Box<Node>, ParserError> {
         match self.tokens.get(self.pos) {
             Some(Token::Op('{')) => {
                 self.pos += 1;
-                let stmt = self.parse_stmt()?;
-                let mut stmts = vec![stmt];
-                while let Some(&token) = self.tokens.get(self.pos).as_ref() {
-                    match token {
-                        Token::Op('}') => {
-                            self.pos += 1;
-                            break;
-                        }
-                        _ => stmts.push(self.parse_stmt()?),
-                    }
-                }
-                Ok(Box::new(Node::Block(stmts)))
+                let node = self.parse_stmts()?;
+                self.expect(&Token::Op('}'))?;
+                Ok(node)
             }
             Some(Token::Return) => {
                 self.pos += 1;
@@ -501,7 +522,8 @@ mod tests {
             if_stmt,
         ]);
         let expe = Box::new(Node::DefFun("f".to_string(), expe, 16));
-        let calc = parser.parse_deffun().unwrap();
+        let expe = block(vec![expe]);
+        let calc = parser.parse_global_defs().unwrap();
         assert_eq!(expe, calc);
     }
 
@@ -547,7 +569,8 @@ mod tests {
         ));
         let b = block(vec![if_stmt]);
         let expe = Box::new(Node::DefFun("f".to_string(), b, 16));
-        let calc = parser.parse_deffun().unwrap();
+        let expe = block(vec![expe]);
+        let calc = parser.parse_global_defs().unwrap();
         assert_eq!(expe, calc);
     }
 
@@ -598,7 +621,7 @@ mod tests {
                 assign(var_d, var_c2),
             ]),
             16,
-        ))]));
+        ))]), vec![]);
         let calc = parser.parse_prog().unwrap();
         assert_eq!(expe, calc);
     }
@@ -631,8 +654,41 @@ mod tests {
             String::from("f"),
             block(vec![aryelm]),
             8 * 10,
-        ))]));
+        ))]), vec![]);
         let calc = parser.parse_prog().unwrap();
         assert_eq!(expe, calc);
     }
+
+    // FIXME: refactor test name to array_test
+    #[test]
+    fn test_global_var() {
+        let tokens = vec![
+            Token::Int,
+            Token::Id("abc".to_string()),
+            Token::Op(';'),
+            Token::Int,
+            Token::Id(String::from("f")),
+            Token::Op('('),
+            Token::Op(')'),
+            Token::Op('{'),
+            Token::Int,
+            Token::Id(String::from("x")),
+            Token::Op(';'),
+            Token::Op('}'),
+        ];
+        let mut parser = Parser::new(tokens);
+        let node = block(vec![Box::new(Node::DefFun(
+            String::from("f"),
+            block(vec![]),
+            8,
+        ))]);
+        let global_vars = vec![GlobalVar {
+            name: "abc".to_string(),
+            ty: Type::Int,
+            label: "abc".to_string(),
+        }];
+        let expe = Prog::new(node, global_vars);
+        let calc = parser.parse_prog().unwrap();
+        assert_eq!(expe, calc);
+    }    
 }

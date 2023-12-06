@@ -1,11 +1,12 @@
 #[derive(Debug, PartialEq)]
 pub struct Prog {
     node: Box<Node>,
+    global_vars: Vec<GlobalVar>,
 }
 
 impl Prog {
-    pub fn new(node: Box<Node>) -> Self {
-        Prog { node }
+    pub fn new(node: Box<Node>, global_vars: Vec<GlobalVar>) -> Self {
+        Prog { node, global_vars }
     }
 
     pub fn get_node(&self) -> &Box<Node> {
@@ -24,6 +25,13 @@ impl Prog {
             _ => panic!("unexpected node in Prog"),
         }
     }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct GlobalVar {
+    pub name: String,
+    pub ty: Type,
+    pub label: String,
 }
 
 #[derive(Debug, PartialEq)]
