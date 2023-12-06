@@ -51,3 +51,7 @@ ycc9: ${BIN} ./y86/9pointer.yc
 ycc10: ${BIN} ./y86/10array.yc
 		@echo "test pointer. expect 7"
 		${BIN} run ./y86/10array.yc --log-level 0
+
+ycc11: ${BIN} ./y86/tests/11global.yc
+		@echo "test global variable. expect 0x0E"
+		${BIN} run ./y86/tests/11global.yc --log-level 2

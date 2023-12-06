@@ -392,7 +392,7 @@ impl Parser {
                         self.pos += 1;
                         let v = *self.find_var(&id)?;
                         let (ty, offset) = match v {
-                            Node::Variable(Type::Ary(ty, _), offset) => (*ty, offset),
+                            Node::LocalVar(Type::Ary(ty, _), offset) => (*ty, offset),
                             _ => {
                                 return self.error("unexpected type")
                             }
@@ -433,17 +433,18 @@ impl Parser {
     }
 
     fn find_var(&self, id: &str) -> Result<Box<Node>, ParserError> {
-        // variable
+        // below image is about local variable or argument
         //                      +-(RBP)
         // stack = .. L2 L1 L0 OB RE A0 A1 A2 ..
-        let argi = self.args.iter().find(|x| x.name == id);
-        let lvari = self.lvars.iter().find(|x| x.name == id);
-        let v = match (argi, lvari) {
-            (Some(i), None) => i,
-            (None, Some(i)) => i,
-            _ => return self.error("lvar not found."),
-        };
-        Ok(Box::new(Node::Variable(v.ty.clone(), v.offset)))
+        if let Some(v) = self.args.iter().find(|x| x.name == id) {
+            Ok(Box::new(Node::LocalVar(v.ty.clone(), v.offset)))
+        } else if let Some(v) = self.lvars.iter().find(|x| x.name == id) {
+            Ok(Box::new(Node::LocalVar(v.ty.clone(), v.offset)))
+        } else if let Some(v) = self.gvars.iter().find(|x| x.name == id) {
+            Ok(Box::new(Node::GlobalVar(v.label.clone())))
+        } else {
+            self.error(&format!("var not found. id={}", id))
+        }
     }
 }
 
@@ -507,12 +508,12 @@ mod tests {
         let if_stmt = Box::new(Node::If(
             Box::new(Node::BinaryOp(
                 BinaryOp::Eq,
-                Box::new(Node::Variable(Type::Int, -8)),
+                Box::new(Node::LocalVar(Type::Int, -8)),
                 Box::new(Node::Num(2)),
             )),
             Box::new(Node::BinaryOp(
                 BinaryOp::Assign,
-                Box::new(Node::Variable(Type::Int, -16)),
+                Box::new(Node::LocalVar(Type::Int, -16)),
                 Box::new(Node::Num(1)),
             )),
         ));
@@ -557,11 +558,11 @@ mod tests {
         ];
         let mut parser = Parser::new(tokens);
         let if_stmt = Box::new(Node::If(
-            Box::new(Node::Variable(Type::Int, -8)),
+            Box::new(Node::LocalVar(Type::Int, -8)),
             Box::new(Node::Block(vec![
                 Box::new(Node::BinaryOp(
                     BinaryOp::Assign,
-                    Box::new(Node::Variable(Type::Int, -16)),
+                    Box::new(Node::LocalVar(Type::Int, -16)),
                     Box::new(Node::Num(1)),
                 )),
                 Box::new(Node::Num(4)),

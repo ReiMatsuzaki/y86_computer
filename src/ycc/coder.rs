@@ -1,6 +1,6 @@
 use super::{node::*, INIT_SP};
 
-use crate::yas::code::{Register, Code, Expr};
+use crate::yas::code::{Register, Code, Expr, Directive};
 
 pub struct Coder {
     label_count: u64,
@@ -12,21 +12,31 @@ impl Coder {
     }
 
     pub fn code(&mut self, prog: &Prog) -> Vec<Code> {
-        let mut stmts = self.code_prologue();
+        let mut stmts = self.code_prologue(prog.get_global_vars());
         let node = prog.get_node();
         stmts.append(&mut self.code_stmt(&node));
         stmts
     }
 
-    fn code_prologue(&self) -> Vec<Code> {
-        let mut codes = vec![
+    fn code_prologue(&self, global_vars: &Vec<GlobalVar>) -> Vec<Code> {
+        let mut codes = vec![];
+        codes.append(&mut vec![
             // initialize stack pointer and meaning less base pointer
             Code::Irmovq(Register::RSP, Expr::Value(INIT_SP)),
             Code::Irmovq(Register::RBP, Expr::Value(INIT_SP + 10)),
-        ];
-        let n = Box::new(Node::Call("main".to_string(), vec![]));
-        codes.append(&mut self.code_expr(&n));
-        codes.append(&mut vec![Code::Halt]);
+            Code::Call(Expr::Label("main".to_string())),
+            Code::Halt,
+        ]);
+        for var in global_vars {
+            let size = match var.ty {
+                Type::Int | Type::Ptr => 1,
+                Type::Ary(_, size) => size,
+            };
+            codes.push(Code::Label(var.label.to_string()));
+            for _ in 0..size {
+                codes.push(Code::Directive(Directive::Quad(Expr::Value(0))));
+            }
+        }
         codes
     }
 
@@ -125,7 +135,7 @@ impl Coder {
 
     fn is_pointer(node: &Node) -> bool {
         match node {
-            Node::Variable(Type::Ptr, _) => true,
+            Node::LocalVar(Type::Ptr, _) => true,
             _ => false,
         }
     }
@@ -228,7 +238,7 @@ impl Coder {
                     Code::Pushq(Register::RBX),
                 ]
             }
-            Node::Variable(_, _) | Node::AryElem(_, _, _) => {
+            Node::LocalVar(_, _) | Node::AryElem(_, _, _) | Node::GlobalVar(_) => {
                 let mut codes = self.code_lvar(node);
                 codes.push(Code::Popq(Register::RAX));
                 codes.push(Code::Mrmovq(
@@ -286,7 +296,7 @@ impl Coder {
                 // assume expr is Variable and push its value (address of something)
                 self.code_expr(expr)
             }
-            Node::Variable(_, offset) => {
+            Node::LocalVar(_, offset) => {
                 let abs_offset = offset.abs() as u64;
                 vec![
                     // FIXME: support Irmovq for negative integer
@@ -300,10 +310,16 @@ impl Coder {
                     Code::Pushq(Register::RBX),
                 ]
             }
+            Node::GlobalVar(label) => {
+                vec![
+                    Code::Irmovq(Register::RAX, Expr::Label(label.to_string())),
+                    Code::Pushq(Register::RAX),
+                ]
+            }
             Node::AryElem(ty, offset, index) => {
                 // FIXME: impl as a[index] -> *(a + index)
                 let mut codes = self.code_expr(index);
-                let var = Box::new(Node::Variable(ty.clone(), *offset));
+                let var = Box::new(Node::LocalVar(ty.clone(), *offset));
                 codes.append(&mut self.code_lvar(&var));
                 codes.append(&mut vec![
                     Code::Popq(Register::RAX), // %rax: address of a[0]
@@ -315,7 +331,7 @@ impl Coder {
                 ]);
                 codes
             }
-            _ => panic!("unexpected node in code_lvar"),
+            _ => panic!("unexpected node in code_lvar. node={:?}", node),
         }
     }
 }
@@ -327,12 +343,12 @@ mod tests {
     use crate::yas::code::{Register, Code};
 
     #[test]
-    fn test_code() {
+    fn test_coder() {
         let mut coder = Coder::new();
         // a = 1 + 2
         let a = add(num(23), num(34));
         let p = Prog::new(block(vec![a]), vec![]);
-        let mut expe = coder.code_prologue();
+        let mut expe = coder.code_prologue(p.get_global_vars());
         expe.append(&mut vec![
             Code::Irmovq(Register::RBX, Expr::Value(23)),
             Code::Pushq(Register::RBX),

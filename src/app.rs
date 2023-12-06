@@ -1,5 +1,7 @@
 use std::{ffi::OsStr, path::Path};
 
+use csapp::utils::print_bytes;
+
 use crate::{
     yas, ycc,
     yis::{self, Y8R},
@@ -50,6 +52,11 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
         Err(e) => panic!("{}", e),
     };
 
+    if log_level >= 1 {
+        println!("\nbytesn");
+        print_bytes(&bytes, Some(0), Some(1024));
+    }
+
     if command == "build" {
         println!("\nbytes:");
         panic!("not implemented. command=build")
@@ -94,55 +101,61 @@ mod tests {
 
     #[test]
     fn test_plus() {
-        let filename = "y86/plus.yc";
+        let filename = "y86/tests/plus.yc";
         assert_eq!(0x6, run_file(filename));
     }
 
     #[test]
     fn test_arithmetric() {
-        let filename = "y86/arithmetric.yc";
+        let filename = "y86/tests/arithmetric.yc";
         assert_eq!(0x21, run_file(filename));
     }
 
     #[test]
     fn test_var() {
-        let filename = "y86/4var.yc";
+        let filename = "y86/tests/4var.yc";
         assert_eq!(0xB, run_file(filename));
     }
 
     #[test]
     fn test_assign() {
-        let filename = "y86/5assign.yc";
+        let filename = "y86/tests/5assign.yc";
         assert_eq!(0x4, run_file(filename));
     }
 
     #[test]
     fn test_while() {
-        let filename = "y86/6while.yc";
+        let filename = "y86/tests/6while.yc";
         assert_eq!(0x7, run_file(filename));
     }
 
     #[test]
     fn test_block() {
-        let filename = "y86/7block.yc";
+        let filename = "y86/tests/7block.yc";
         assert_eq!(0x18, run_file(filename));
     }
 
     #[test]
     fn test_def() {
-        let filename = "y86/8def.yc";
+        let filename = "y86/tests/8def.yc";
         assert_eq!(0x5, run_file(filename));
     }
 
     #[test]
     fn test_pointer() {
-        let filename = "y86/9pointer.yc";
+        let filename = "y86/tests/9pointer.yc";
         assert_eq!(0x5, run_file(filename));
     }
 
     #[test]
     fn test_array() {
-        let filename = "y86/10array.yc";
+        let filename = "y86/tests/10array.yc";
         assert_eq!(0x7, run_file(filename));
+    }
+
+    #[test]
+    fn test_global() {
+        let filename = "y86/tests/11global.yc";
+        assert_eq!(0xE, run_file(filename));
     }
 }

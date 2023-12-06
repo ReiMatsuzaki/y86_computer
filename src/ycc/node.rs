@@ -13,6 +13,10 @@ impl Prog {
         &self.node
     }
 
+    pub fn get_global_vars(&self) -> &Vec<GlobalVar> {
+        &self.global_vars
+    }
+
     pub fn display(&self) {
         println!("Prog:");
         let node = &(*self.node);
@@ -42,7 +46,8 @@ pub enum Node {
     Num(u64),
     // FIXME: define variable type
     // FIXME: String can be removed
-    Variable(Type, i64), // type, offset; variable address is (offset + %RBP)
+    LocalVar(Type, i64), // type, offset; variable address is (offset + %RBP)
+    GlobalVar(String), // label
     AryElem(Type, i64, Box<Node>), // element type, offset, index
     
     // Stmt
@@ -127,7 +132,7 @@ pub mod test_utils {
     }
 
     pub fn var(t: Type, offset: i64) -> Box<Node> {
-        Box::new(Node::Variable(t, offset))
+        Box::new(Node::LocalVar(t, offset))
     }
 
     pub fn block(stmts: Vec<Box<Node>>) -> Box<Node> {

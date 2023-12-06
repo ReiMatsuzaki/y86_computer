@@ -1,0 +1,9 @@
+int x;
+int y;
+int main() {
+  int a;
+  a = 11;
+  x = a + 1;
+  y = x + 2;
+  return y;
+}
