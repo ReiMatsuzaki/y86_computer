@@ -245,16 +245,19 @@ mod tests {
         let codes: Vec<Code> = vec![
             Code::Directive(Directive::Pos(2)),
             Code::Label("orange".to_string()),
-            Code::Rrmovq(Register::RAX, Register::RBX),
-            Code::Directive(Directive::Pos(8)),
+            Code::Directive(Directive::Quad(Expr::Value(0x0102030405060708))),
+            Code::Directive(Directive::Pos(12)),
             Code::Label("apple".to_string()),
-            Code::Jmp(Expr::Label("apple".to_string())),
+            Code::Directive(Directive::Quad(Expr::Label("apple".to_string()))),
         ];
         let mut memory: Vec<u8> = Vec::new();
-        memory.resize(18, 0x00);
+        memory.resize(20, 0x00);
         let memory = ByteWriter::write(codes, memory).unwrap();
         let expe: Vec<u8> = vec![
-            0, 0, 0x20, 0x03, 0, 0, 0, 0, 0x70, 0x08, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 
+            0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+            0, 0,
+            0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(expe, memory);
     }
