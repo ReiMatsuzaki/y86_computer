@@ -158,4 +158,10 @@ mod tests {
         let filename = "y86/tests/11global.yc";
         assert_eq!(0xE, run_file(filename));
     }
+
+    #[test]
+    fn test_string() {
+        let filename = "y86/tests/12string.yc";
+        assert_eq!(0x65, run_file(filename));
+    }
 }

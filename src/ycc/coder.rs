@@ -33,8 +33,8 @@ impl Coder {
                 Type::Ary(_, size) => size,
             };
             codes.push(Code::Label(var.label.to_string()));
-            for _ in 0..size {
-                codes.push(Code::Directive(Directive::Quad(Expr::Value(0))));
+            for i in 0..size {
+                codes.push(Code::Directive(Directive::Quad(Expr::Value(var.values[i]))));
             }
         }
         codes

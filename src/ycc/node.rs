@@ -36,6 +36,7 @@ pub struct GlobalVar {
     pub name: String,
     pub ty: Type,
     pub label: String,
+    pub values: Vec<u64>,
 }
 
 #[derive(Debug, PartialEq)]

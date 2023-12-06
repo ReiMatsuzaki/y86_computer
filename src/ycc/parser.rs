@@ -223,13 +223,17 @@ impl Parser {
     }
 
     fn add_gvars(&mut self, id: String, ty: Type) -> Result<(), ParserError> {
-        if self.lvars.iter().any(|v| v.name.eq(&id)) {
+        // FIXME: support bytes and label
+        if self.gvars.iter().any(|v| v.name.eq(&id)) {
             return self.error(&format!("global variable already defined. id={}", id));
         }
+        let mut values = Vec::new();
+        values.resize((ty.size()/8).try_into().unwrap(), 0);
         self.gvars.push(GlobalVar {
             name: id.to_string(),
             ty: ty.clone(),
             label: id.to_string(), // change label
+            values,
         });
         Ok(())
     }
@@ -379,6 +383,23 @@ impl Parser {
 
     fn parse_primary(&mut self) -> Result<Box<Node>, ParserError> {
         match self.tokens.get(self.pos) {
+            Some(Token::Str(s)) => {
+                self.pos += 1;
+                let label = format!(".LC{}", self.gvars.len());
+                let mut xs: Vec<u64> = vec![];
+                for x in s.as_bytes() {
+                    xs.push(*x as u64);
+                }
+                // FIXME: use self.add_gvar()
+                self.gvars.push(GlobalVar {
+                    name: label.clone(),
+                    ty: Type::Ary(Box::new(Type::Int), s.len()),
+                    label: label.clone(),
+                    values: xs,
+                });
+                let gvar = self.find_var(&label.as_str())?;
+                Ok(Box::new(Node::UnaryOp(UnaryOp::Addr, gvar)))
+            }
             Some(Token::Num(n)) => {
                 self.pos += 1;
                 Ok(Box::new(Node::Num(*n)))
@@ -687,6 +708,7 @@ mod tests {
             name: "abc".to_string(),
             ty: Type::Int,
             label: "abc".to_string(),
+            values: vec![0],
         }];
         let expe = Prog::new(node, global_vars);
         let calc = parser.parse_prog().unwrap();

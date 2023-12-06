@@ -95,6 +95,22 @@ impl<'a> Tokenizer<'a> {
                     }
                     tokens.push((Token::Num(num.parse::<u64>().unwrap()), ti));
                 }
+                '"' => {
+                    let mut s = String::new();
+                    while let Some(&c) = self.peek() {
+                        match c {
+                            '"' => {
+                                self.next();
+                                break;
+                            }
+                            _ => {
+                                s.push(c);
+                                self.next();
+                            }
+                        }
+                    }
+                    tokens.push((Token::Str(s), ti));
+                }
                 _ => {
                     let mut buf = String::new();
                     buf.push(c);
@@ -154,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_statement() {
-        let input = "while (a < 10) { if(a ==2) {int x = a + 1; return x; } }";
+        let input = "while (a < 10) { if(a ==2) {int x = a + \"abc\"; return x; } }";
         let expe = vec![
             Token::While,
             Token::Op('('),
@@ -175,7 +191,7 @@ mod tests {
             Token::Op('='),
             Token::Id(String::from("a")),
             Token::Op('+'),
-            Token::Num(1),
+            Token::Str("abc".to_string()),
             Token::Op(';'),
             Token::Return,
             Token::Id(String::from("x")),

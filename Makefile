@@ -55,3 +55,7 @@ ycc10: ${BIN} ./y86/10array.yc
 ycc11: ${BIN} ./y86/tests/11global.yc
 		@echo "test global variable. expect 0x0E"
 		${BIN} run ./y86/tests/11global.yc --log-level 2
+
+ycc12: ${BIN} ./y86/tests/12string.yc
+		@echo "test string literal. expect 'e'=0x65"
+		${BIN} run ./y86/tests/12string.yc --log-level 0
