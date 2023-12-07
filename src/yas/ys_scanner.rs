@@ -54,12 +54,26 @@ impl Scanner {
     fn scan_directive(&self, input: &str) -> Result<Code, ScanError> {
         let parts: Vec<&str> = input.split(" ").collect();
         match parts.as_slice() {
-            [".pos", pos] => match pos.parse::<u64>() {
-                Ok(i) => Ok(Code::Directive(Directive::Pos(i))),
-                Err(e) => self.error(e.to_string()),
-            }
+            [".pos", pos] => self.scan_num(pos)
+                .map(|i| Code::Directive(Directive::Pos(i))),
             [".quad", expr] => Ok(Code::Directive(Directive::Quad(self.scan_expr(expr)?))),
             _ => self.error(format!("invalid directive: {}", input)),
+        }
+    }
+
+    fn scan_num(&self, input: &str) -> Result<u64, ScanError> {
+        // FIXME: duplicated code
+        match input.parse::<u64>() {
+            Ok(i) => Ok(i),
+            Err(_) => {
+                let mut cs = input.chars();
+                if cs.nth(0) == Some('0') && cs.nth(0) == Some('x') {
+                    let x = u64::from_str_radix(cs.as_str(), 16).unwrap();
+                    Ok(x)
+                } else {
+                    self.error(format!("invalid number: {}", input))
+                }
+            }
         }
     }
 
@@ -134,7 +148,7 @@ impl Scanner {
         let num_str = input.trim();
         if let Ok(num) = num_str.parse::<u64>() {
             Ok(Expr::Value(num))
-        } else if num_str.chars().all(char::is_alphabetic) {
+        } else if num_str.chars().all(|x| x.is_alphabetic() || x=='_') {
             Ok(Expr::Label(num_str.to_string()))
         } else {
             self.error(format!("invalid Expr: {}", input))

@@ -15,6 +15,10 @@ impl Ram {
         }
     }
 
+    pub fn size(&self) -> usize {
+        self.memory.len()
+    }
+
     pub fn read(&self, addr: usize) -> u8 {
         self.memory[addr]
     }

@@ -4,6 +4,7 @@ use super::inst::*;
 use super::ram::*;
 
 // const MEM_SIZE: usize = 0x10000;
+const EXCEPTION_TABLE_BASE: usize = 0xE200;
 
 #[derive(Debug, Clone)]
 struct Fetched {
@@ -59,27 +60,45 @@ pub struct SeqProcessor {
     of: u8,
     stat: Y8S,
 
+    exception: bool,
+    ecf_regs: [u64; 16],
+    ecf_pc: usize,
+    ecf_zf: u8,
+    ecf_sf: u8,
+
     verbose: i64,
+}
+
+enum ProcError {
+    DivideError,
+    ProtectionFault
 }
 
 fn split_byte(x: u8) -> (u8, u8) {
     return (x >> 4, x & 0x0F);
 }
 
+type Res<T> = Result<T, ProcError>;
+
 impl SeqProcessor {
     pub fn new(verbose: i64) -> SeqProcessor {
         let machine = SeqProcessor {
-            regs: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            regs: [0; 16],
             pc: 0,
             zf: 0,
             sf: 0,
             of: 0,
             stat: Y8S::AOK,
             verbose,
+            exception: false,
+            ecf_regs: [0; 16],
+            ecf_pc: 0,
+            ecf_zf: 0,
+            ecf_sf: 0,            
         };
         return machine;
     }
-    fn fetch(&mut self, ram: & Ram) -> Fetched {
+    fn fetch(&mut self, ram: & Ram) -> Res<Fetched> {
         self.stat = Y8S::AOK;
 
         let code_fn = match decode_codefn(ram.read(self.pc)) {
@@ -112,15 +131,15 @@ impl SeqProcessor {
         };
         // let val_c: u64 = self.memory[c0].into();
         let val_c: u64 = ram.read_quad(c0);
-        return Fetched {
+        Ok(Fetched {
             code_fn,
             ra,
             rb,
             val_c,
             val_p,
-        };
+        })
     }
-    fn decode(&self, fetched: &Fetched) -> Decoded {
+    fn decode(&self, fetched: &Fetched) -> Res<Decoded> {
         let ra = fetched.ra as usize;
         let rb = fetched.rb as usize;
         let rsp = Y8R::RSP as usize;
@@ -166,14 +185,14 @@ impl SeqProcessor {
         };
         let val_a: u64 = self.regs[src_a];
         let val_b: u64 = self.regs[src_b];
-        return Decoded {
+        Ok(Decoded {
             val_a,
             val_b,
             dst_e,
             dst_m,
-        };
+        })
     }
-    fn execute(&mut self, f: &Fetched, d: &Decoded) -> Executed {
+    fn execute(&mut self, f: &Fetched, d: &Decoded) -> Res<Executed> {
         let va = d.val_a;
         let vb = d.val_b;
         let vc = f.val_c;
@@ -190,7 +209,7 @@ impl SeqProcessor {
                 OpqFn::AND => va & vb,
                 OpqFn::OR => va | vb,
                 OpqFn::MUL => va * vb,
-                OpqFn::DIV => vb / va,
+                OpqFn::DIV => if va==0 { 0 } else {vb / va}
             },
             CodeFn::JXX(_) => 0,
             CodeFn::CMOVXX(_) => va,
@@ -207,9 +226,9 @@ impl SeqProcessor {
             }
             _ => {}
         }
-        return Executed { val_e };
+        Ok(Executed { val_e })
     }
-    fn memory(&mut self, f: &Fetched, d: &Decoded, e: &Executed, ram: &mut Ram) -> Memoried {
+    fn memory(&mut self, f: &Fetched, d: &Decoded, e: &Executed, ram: &mut Ram) -> Res<Memoried> {
         let val_m = match f.code_fn {
             CodeFn::HALT => 0,
             CodeFn::NOP => 0,
@@ -217,6 +236,9 @@ impl SeqProcessor {
             CodeFn::IRMOVQ => 0,
             CodeFn::RMMOVQ => {
                 let addr = e.val_e as usize;
+                if ram.size() <= addr {
+                    return Err(ProcError::ProtectionFault);
+                }
                 ram.write_quad(addr, d.val_a);
                 0
             }
@@ -242,7 +264,7 @@ impl SeqProcessor {
                 ram.read_quad(addr)
             }
         };
-        return Memoried { val_m };
+        Ok(Memoried { val_m })
     }
     fn write(&mut self, f: &Fetched, d: &Decoded, e: &Executed, m: &Memoried) {
         self.regs[d.dst_e as usize] = e.val_e;
@@ -292,24 +314,60 @@ impl SeqProcessor {
         // );
     }
     pub fn cycle(&mut self, ram: &mut Ram) -> Y8S {
-        let fetched = self.fetch(ram);
+        if self.exception && ram.read(self.pc) == 0x90 { 
+            // recover if return in exception
+            self.exception = false;
+            self.pc = self.ecf_pc;
+            self.regs = self.ecf_regs;
+            self.zf = self.ecf_zf;
+            self.sf = self.ecf_sf;
+        }
+        match self.cycle_in(ram) {
+            Ok(s) => s,
+            Err(e) => {
+                self.exception = true;
+                // save current register
+                self.ecf_pc = self.pc;
+                self.ecf_regs = self.regs;
+                self.ecf_zf = self.zf;
+                self.ecf_sf = self.sf;
+                // jump 
+                let exception_number = match e {
+                    ProcError::DivideError => 0,
+                    ProcError::ProtectionFault => 1,
+                };
+                let e_handler_addr = ram.read_quad(EXCEPTION_TABLE_BASE + exception_number * 8);
+                // println!("error ditected. new pc={}", e_handler_addr);
+                self.pc = e_handler_addr as usize;
+                Y8S::AOK
+            },
+        }
+        
+    }
+    fn cycle_in(&mut self, ram: &mut Ram) -> Res<Y8S> {
+        let fetched = self.fetch(ram)?;
         if self.verbose >= 2 {
             println!("fetched: {}", fetched);
         }
-        let decoded = self.decode(&fetched);
+        let decoded = self.decode(&fetched)?;
         if self.verbose >= 3 {
             println!("{:?}", decoded);
         }
-        let executed = self.execute(&fetched, &decoded);
+        let executed = self.execute(&fetched, &decoded)?;
         if self.verbose >= 3 {
             println!("{:?}", executed);
         }
-        let memoried = self.memory(&fetched, &decoded, &executed, ram);
+        let memoried = self.memory(&fetched, &decoded, &executed, ram)?;
         if self.verbose >= 3 {
             println!("{:?}", memoried);
         }
         self.write(&fetched, &decoded, &executed, &memoried);
-        self.stat.clone()
+
+        if fetched.code_fn == CodeFn::OPQ(OpqFn::DIV) && decoded.val_a == 0 {
+            return Err(ProcError::DivideError);
+        }
+
+        Ok(self.stat.clone())
     }
     pub fn get_register(&self, r: Y8R) -> u64 {
         return self.regs[r as usize];

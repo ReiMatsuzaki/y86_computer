@@ -1,0 +1,24 @@
+irmovq $2816, %rsp
+irmovq $2816, %rbp
+call main
+halt
+
+.pos 0xe200
+.quad handler_div_error
+.quad handler_memory_fault
+
+.pos 0xe300
+handler_div_error:
+irmovq $7, %rax
+ret
+
+handler_memory_fault:
+irmovq $8, %rax
+ret
+
+main:
+irmovq $0, %rax
+irmovq $1, %rbx
+divq %rax, %rbx
+irmovq $3, %rax
+ret

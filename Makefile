@@ -63,4 +63,7 @@ ycc12: ${BIN} ./y86/tests/12string.yc
 ycc13: ${BIN} ./y86/tests/13console.yc
 		@echo "test console. expect 'Hello, World!' on console"
 		${BIN} run ./y86/tests/13console.yc --log-level 0 --watch-memory-range 57344:57856
+
+yas3: ${BIN} ./y86/tests/yas3_exception_div.ys
+		${BIN} run ./y86/tests/yas3_exception_div.ys --log-level 2
 	

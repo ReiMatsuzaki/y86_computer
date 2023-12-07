@@ -22,7 +22,7 @@ pub enum Y8S {
     INS = 0x4,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OpqFn {
     ADD,
     SUB,
@@ -32,7 +32,7 @@ pub enum OpqFn {
     DIV,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum JxxFn {
     JMP,
     JLE,
@@ -44,7 +44,7 @@ pub enum JxxFn {
 #[derive(Debug, Clone, Copy)]
 pub enum CmovFn {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CodeFn {
     HALT,
     NOP,
