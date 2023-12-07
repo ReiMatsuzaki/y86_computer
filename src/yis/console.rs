@@ -6,7 +6,7 @@ pub struct Console {}
 // M[addr] is memory byte at address addr
 // M[0xE000] = 0 => do nothing
 //           = 1 => write bytes at console
-// M[0xE001] = length of bytes
+// M[0xE010] = length of bytes
 // M[0xE100 .. 0xE1FF] is buffer
 
 impl Console {
@@ -23,9 +23,9 @@ impl Console {
     }
 
     fn write(&self, ram :&Ram) {
-        let len = ram.read(0xE001);
+        let len = ram.read(0xE010);
         for i in 0..len {
-            let c = ram.read(0xE100 + i as usize);
+            let c = ram.read(0xE100 + 8*i as usize);
             print!("{}", c as char);
         }
     }

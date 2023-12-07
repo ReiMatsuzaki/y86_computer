@@ -1,5 +1,21 @@
 int main() {
-  int *x;
-  x = "Hello, world!";
-  return *(x+1);
+  int *flg;
+  int *len;
+  int *buf;
+  int *msg;
+  int i;
+  flg = 0xE000;
+  len = 0xE010;
+  buf = 0xE100;
+
+  msg = "Hello, world!";
+
+  *len = 13;
+  i = 0;
+  while(i < *len) {
+    *(buf+i) = *(msg+i);
+    i = i + 1;
+  }
+  *flg = 1;
+  return 0;
 }

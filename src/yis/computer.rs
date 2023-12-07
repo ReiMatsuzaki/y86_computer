@@ -2,6 +2,7 @@ use crate::yis::inst::Y8R;
 
 use super::{proc::SeqProcessor, ram::Ram, inst::Y8S, console::Console};
 
+const MAX_CYCLE: u64 = 10000;
 pub struct Computer {
     proc: SeqProcessor,
     ram: Ram,
@@ -26,7 +27,7 @@ impl Computer {
     }
 
     pub fn start(&mut self) -> Option<(u64, u64)> {
-        for cyc in 0..1000 {
+        for cyc in 0..MAX_CYCLE {
             let stat = self.proc.cycle(&mut self.ram);
             self.console.cycle(&mut self.ram);
 

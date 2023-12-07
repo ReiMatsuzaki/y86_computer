@@ -400,7 +400,7 @@ impl Parser {
                 let gvar = self.find_var(&label.as_str())?;
                 Ok(Box::new(Node::UnaryOp(UnaryOp::Addr, gvar)))
             }
-            Some(Token::Num(n)) => {
+            Some(Token::Num(n)) | Some(Token::Hex(n)) => {
                 self.pos += 1;
                 Ok(Box::new(Node::Num(*n)))
             }

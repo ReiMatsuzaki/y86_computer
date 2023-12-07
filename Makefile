@@ -59,3 +59,8 @@ ycc11: ${BIN} ./y86/tests/11global.yc
 ycc12: ${BIN} ./y86/tests/12string.yc
 		@echo "test string literal. expect 'e'=0x65"
 		${BIN} run ./y86/tests/12string.yc --log-level 0
+
+ycc13: ${BIN} ./y86/tests/13console.yc
+		@echo "test console. expect 'Hello, World!' on console"
+		${BIN} run ./y86/tests/13console.yc --log-level 0 --watch-memory-range 57344:57856
+	
