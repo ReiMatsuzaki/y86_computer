@@ -1,7 +1,7 @@
 use std::{ffi::OsStr, path::Path};
 
 use crate::{
-    yas, ycc, yis::{self, inst::Y8R, ram::Ram},
+    yas, ycc, yis::computer::Computer,
 };
 
 // Y86_64 simulator
@@ -43,19 +43,17 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
     }
     let mut bytes: Vec<u8> = Vec::new();
     bytes.resize(8000, 0x00);
-
     let bytes = match yas::write_bytes(statements, bytes) {
         Ok(a) => a,
         Err(e) => panic!("{}", e),
     };
 
-    let mut ram = Ram::new(0x10000);
-    ram.load(0, &bytes);
+    let mut computer = Computer::new(0x10000, log_level, wrange);
+
+    println!("load bytes to ram");
+    computer.load(0, &bytes);
     if log_level >= 1 {
-        if let Some((s, e)) = wrange {
-            println!("\nbytes:");
-            ram.print(Some(s), Some(e));
-        }
+        computer.print_ram();
     }
 
     if command == "build" {
@@ -66,21 +64,16 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
         if log_level >= 0 {
             println!("yis start");
         }
-        let mut machine = yis::proc::SeqProcessor::new(log_level);
-        let maybe_cycle = machine.start(&mut ram);
-        match maybe_cycle {
-            Some(cycle) => {
+        let maybe_res = computer.start();
+        match maybe_res {
+            Some((cycle, res)) => {
                 if log_level >= 0 {
                     println!("halted. cycle: {}", cycle)
                 }
+                return res
             }
-            None => println!("too much cycles. stopped."),
+            None => panic!("too much cycles. stopped."),
         }
-        if log_level >= 0 {
-            println!("\nregisters:");
-            machine.print_registers();
-        }
-        return machine.get_register(Y8R::RAX).try_into().unwrap();
     } else {
         panic!("unexpected command")
     }

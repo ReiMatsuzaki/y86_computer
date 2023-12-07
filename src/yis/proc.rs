@@ -60,7 +60,6 @@ pub struct SeqProcessor {
     stat: Y8S,
 
     verbose: i64,
-    watch_memory_range: Option<(usize, usize)>,
 }
 
 fn split_byte(x: u8) -> (u8, u8) {
@@ -77,7 +76,6 @@ impl SeqProcessor {
             of: 0,
             stat: Y8S::AOK,
             verbose,
-            watch_memory_range: None,
         };
         return machine;
     }
@@ -293,24 +291,7 @@ impl SeqProcessor {
         //     self.regs[Y8R::R11 as usize],
         // );
     }
-    fn print_stack(&self, ram: &Ram) {
-        let init_sp = crate::ycc::INIT_SP;
-        let mini = self.get_register(Y8R::RSP) / 8;
-        println!("stack:");
-        for i in mini..(init_sp / 8) {
-            let addr = init_sp - (i - mini + 1) * 8;
-            let x = ram.read_quad(addr as usize);
-            print!("{0:>04X} : {1:X} ", addr, x);
-            if addr == self.get_register(Y8R::RBP) {
-                print!(" <- rbp");
-            }
-            if addr == self.get_register(Y8R::RSP) {
-                print!(" <- rsp");
-            }
-            println!("");
-        }
-    }
-    pub fn cycle(&mut self, ram: &mut Ram) {
+    pub fn cycle(&mut self, ram: &mut Ram) -> Y8S {
         let fetched = self.fetch(ram);
         if self.verbose >= 2 {
             println!("fetched: {}", fetched);
@@ -328,15 +309,15 @@ impl SeqProcessor {
             println!("{:?}", memoried);
         }
         self.write(&fetched, &decoded, &executed, &memoried);
-        if self.verbose >= 2 {
-            self.print_registers();
-            self.print_stack(ram);
-            if let Some((s, e)) = self.watch_memory_range {
-                ram.print(Some(s), Some(e));
-            }
-            println!("");
-        }
+        self.stat.clone()
     }
+    pub fn get_register(&self, r: Y8R) -> u64 {
+        return self.regs[r as usize];
+    }
+}
+
+#[cfg(test)]
+impl SeqProcessor {
     pub fn start(&mut self, ram: &mut Ram) -> Option<u64> {
         for cyc in 0..1000 {
             self.cycle(ram);
@@ -346,14 +327,12 @@ impl SeqProcessor {
         }
         None
     }
-    pub fn get_register(&self, r: Y8R) -> u64 {
-        return self.regs[r as usize];
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    const MEM_SIZE: usize = 0x10000;
 
     #[test]
     fn split_byte_test() {

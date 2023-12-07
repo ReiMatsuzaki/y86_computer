@@ -1,3 +1,4 @@
+pub(crate) mod computer;
 pub(crate) mod proc;
 pub(crate) mod inst;
 pub(crate) mod ram;
@@ -10,9 +11,3 @@ pub(crate) mod ram;
 // store 16 processes at most
 // 16 * 4kB = 64kB = 16 ** 4
 // simulate 16 bit address space
-
-
-
-#[cfg(test)]
-mod tests {
-}
