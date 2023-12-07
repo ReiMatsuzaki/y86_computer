@@ -3,8 +3,7 @@ use std::{ffi::OsStr, path::Path};
 use csapp::utils::print_bytes;
 
 use crate::{
-    yas, ycc,
-    yis::{self, Y8R},
+    yas, ycc, yis::{self, inst::Y8R},
 };
 
 // Y86_64 simulator
@@ -65,7 +64,7 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
         if log_level >= 0 {
             println!("yis start");
         }
-        let mut machine = yis::make_machine(log_level, wrange);
+        let mut machine = yis::proc::SeqProcessor::new(log_level);
         machine.load(0, &bytes);
         let maybe_cycle = machine.start();
         match maybe_cycle {
