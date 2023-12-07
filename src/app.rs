@@ -1,9 +1,7 @@
 use std::{ffi::OsStr, path::Path};
 
-use csapp::utils::print_bytes;
-
 use crate::{
-    yas, ycc, yis::{self, inst::Y8R},
+    yas, ycc, yis::{self, inst::Y8R, ram::Ram},
 };
 
 // Y86_64 simulator
@@ -51,9 +49,13 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
         Err(e) => panic!("{}", e),
     };
 
+    let mut ram = Ram::new(0x10000);
+    ram.load(0, &bytes);
     if log_level >= 1 {
-        println!("\nbytesn");
-        print_bytes(&bytes, Some(0), Some(1024));
+        if let Some((s, e)) = wrange {
+            println!("\nbytes:");
+            ram.print(Some(s), Some(e));
+        }
     }
 
     if command == "build" {
@@ -65,8 +67,7 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
             println!("yis start");
         }
         let mut machine = yis::proc::SeqProcessor::new(log_level);
-        machine.load(0, &bytes);
-        let maybe_cycle = machine.start();
+        let maybe_cycle = machine.start(&mut ram);
         match maybe_cycle {
             Some(cycle) => {
                 if log_level >= 0 {

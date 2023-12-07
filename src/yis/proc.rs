@@ -1,10 +1,9 @@
-use csapp::utils::print_bytes;
 use std::fmt;
 
 use super::inst::*;
 use super::ram::*;
 
-const MEM_SIZE: usize = 0x10000;
+// const MEM_SIZE: usize = 0x10000;
 
 #[derive(Debug, Clone)]
 struct Fetched {
@@ -58,8 +57,6 @@ pub struct SeqProcessor {
     zf: u8,
     sf: u8,
     of: u8,
-    // FIXME: redefine in ram.rs
-    memory: [u8; MEM_SIZE],
     stat: Y8S,
 
     verbose: i64,
@@ -78,22 +75,16 @@ impl SeqProcessor {
             zf: 0,
             sf: 0,
             of: 0,
-            memory: [0; MEM_SIZE],
             stat: Y8S::AOK,
             verbose,
             watch_memory_range: None,
         };
         return machine;
     }
-    pub fn load(&mut self, pos: usize, insts: &[u8]) {
-        for i in 0..insts.len() {
-            self.memory[pos + i] = insts[i];
-        }
-    }
-    fn fetch(&mut self) -> Fetched {
+    fn fetch(&mut self, ram: & Ram) -> Fetched {
         self.stat = Y8S::AOK;
 
-        let code_fn = match decode_codefn(self.memory[self.pc]) {
+        let code_fn = match decode_codefn(ram.read(self.pc)) {
             Some(CodeFn::HALT) => {
                 self.stat = Y8S::HLT;
                 CodeFn::HALT
@@ -105,7 +96,7 @@ impl SeqProcessor {
             }
         };
 
-        let (ra, rb) = split_byte(self.memory[self.pc + 1]);
+        let (ra, rb) = split_byte(ram.read(self.pc + 1));
         let (val_p, c0): (usize, usize) = match code_fn {
             CodeFn::HALT => (self.pc + 1, self.pc + 2),
             CodeFn::NOP => (self.pc + 1, self.pc + 2),
@@ -122,7 +113,7 @@ impl SeqProcessor {
             CodeFn::POPQ => (self.pc + 2, self.pc + 2),
         };
         // let val_c: u64 = self.memory[c0].into();
-        let val_c: u64 = read_as_words(&self.memory, c0);
+        let val_c: u64 = ram.read_quad(c0);
         return Fetched {
             code_fn,
             ra,
@@ -220,7 +211,7 @@ impl SeqProcessor {
         }
         return Executed { val_e };
     }
-    fn memory(&mut self, f: &Fetched, d: &Decoded, e: &Executed) -> Memoried {
+    fn memory(&mut self, f: &Fetched, d: &Decoded, e: &Executed, ram: &mut Ram) -> Memoried {
         let val_m = match f.code_fn {
             CodeFn::HALT => 0,
             CodeFn::NOP => 0,
@@ -228,29 +219,29 @@ impl SeqProcessor {
             CodeFn::IRMOVQ => 0,
             CodeFn::RMMOVQ => {
                 let addr = e.val_e as usize;
-                write_words(&mut self.memory, addr, d.val_a);
+                ram.write_quad(addr, d.val_a);
                 0
             }
             CodeFn::MRMOVQ => {
                 let addr = e.val_e as usize;
-                read_as_words(&self.memory, addr)
+                ram.read_quad(addr)
             }
             CodeFn::OPQ(_) => 0,
             CodeFn::JXX(_) => 0,
             CodeFn::CMOVXX(_) => 0,
             CodeFn::CALL => {
                 let addr = e.val_e as usize;
-                write_words(&mut self.memory, addr, f.val_p as u64);
+                ram.write_quad(addr, f.val_p as u64);
                 0
             }
             CodeFn::PUSHQ => {
                 let addr = e.val_e as usize;
-                write_words(&mut self.memory, addr, d.val_a as u64);
+                ram.write_quad(addr, d.val_a);
                 0
             }
             CodeFn::RET | CodeFn::POPQ => {
                 let addr = d.val_a as usize;
-                read_as_words(&self.memory, addr)
+                ram.read_quad(addr)
             }
         };
         return Memoried { val_m };
@@ -302,13 +293,13 @@ impl SeqProcessor {
         //     self.regs[Y8R::R11 as usize],
         // );
     }
-    fn print_stack(&self) {
+    fn print_stack(&self, ram: &Ram) {
         let init_sp = crate::ycc::INIT_SP;
         let mini = self.get_register(Y8R::RSP) / 8;
         println!("stack:");
         for i in mini..(init_sp / 8) {
             let addr = init_sp - (i - mini + 1) * 8;
-            let x = read_as_words(&self.memory, addr as usize);
+            let x = ram.read_quad(addr as usize);
             print!("{0:>04X} : {1:X} ", addr, x);
             if addr == self.get_register(Y8R::RBP) {
                 print!(" <- rbp");
@@ -319,8 +310,8 @@ impl SeqProcessor {
             println!("");
         }
     }
-    pub fn cycle(&mut self) {
-        let fetched = self.fetch();
+    pub fn cycle(&mut self, ram: &mut Ram) {
+        let fetched = self.fetch(ram);
         if self.verbose >= 2 {
             println!("fetched: {}", fetched);
         }
@@ -332,42 +323,29 @@ impl SeqProcessor {
         if self.verbose >= 3 {
             println!("{:?}", executed);
         }
-        let memoried = self.memory(&fetched, &decoded, &executed);
+        let memoried = self.memory(&fetched, &decoded, &executed, ram);
         if self.verbose >= 3 {
             println!("{:?}", memoried);
         }
         self.write(&fetched, &decoded, &executed, &memoried);
         if self.verbose >= 2 {
             self.print_registers();
-            self.print_stack();
+            self.print_stack(ram);
             if let Some((s, e)) = self.watch_memory_range {
-                // panic!("print meory is not implemented now.")
-                print_bytes(&Vec::from(self.memory), Some(s), Some(e));
+                ram.print(Some(s), Some(e));
             }
             println!("");
         }
-        if self.verbose > 3 {
-            for j in 0..10 {
-                print!("{0:<2}: ", j);
-                for i in 0..16 {
-                    print!("{0:>02X} ", self.memory[16 * j + i]);
-                }
-                println!("");
-            }
-        }
     }
-    pub fn start(&mut self) -> Option<u64> {
+    pub fn start(&mut self, ram: &mut Ram) -> Option<u64> {
         for cyc in 0..1000 {
-            self.cycle();
+            self.cycle(ram);
             if self.stat == Y8S::HLT {
                 return Some(cyc);
             }
         }
         None
     }
-    // pub fn get_memory(&self, i: usize) -> u8 {
-    //     return self.memory[i];
-    // }
     pub fn get_register(&self, r: Y8R) -> u64 {
         return self.regs[r as usize];
     }
@@ -387,6 +365,7 @@ mod tests {
 
     #[test]
     fn seq_processor_test() {
+        let mut ram = Ram::new(MEM_SIZE);
         let mut machine = SeqProcessor::new(0);
         let insts: [u8; 4 * 10 + 2 * 9 + 3 * 2 + 2 * 1] = [
             // 0x00: IRMOVQ $9  $rdx
@@ -410,15 +389,16 @@ mod tests {
             0x00, // 0x41: ret
             0x90,
         ];
-        machine.load(0, &insts);
-        machine.start();
-        assert_eq!(0x80, machine.memory[0x70]);
-        assert_eq!(0x40, machine.memory[0x78]);
+        ram.load(0, &insts);
+        machine.start(&mut ram);
+        assert_eq!(0x80, ram.read(0x70));
+        assert_eq!(0x40, ram.read(0x78));
         assert_eq!(0x09, machine.get_register(Y8R::RAX));
     }
 
     #[test]
     fn opq_test() {
+        let mut ram = Ram::new(MEM_SIZE);
         let insts: [u8; 2 * 10 + 2] = [
             // IRMOVQ $9  $rdx
             0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0, // IRMOVQ $4 $rbx
@@ -427,8 +407,8 @@ mod tests {
             // -> rdx=0x09, rbx=-5
         ];
         let mut machine = SeqProcessor::new(0);
-        machine.load(0, &insts);
-        machine.start();
+        ram.load(0, &insts);
+        machine.start(&mut ram);
         let neg: u64 = 5;
         assert_eq!(0, neg.wrapping_add(machine.get_register(Y8R::RBX)));
 
@@ -441,8 +421,8 @@ mod tests {
             0x60, 0x23, // -> rbx=4
         ];
         let mut machine = SeqProcessor::new(0);
-        machine.load(0, &insts);
-        machine.start();
+        ram.load(0, &insts);
+        machine.start(&mut ram);
         assert_eq!(0x04, machine.get_register(Y8R::RBX));
 
         let insts: [u8; 4 * 10 + 2 * 2] = [
@@ -458,14 +438,15 @@ mod tests {
             // -> rax=0x02
         ];
         let mut machine = SeqProcessor::new(0);
-        machine.load(0, &insts);
-        machine.start();
+        ram.load(0, &insts);
+        machine.start(&mut ram);
         assert_eq!(0x24, machine.get_register(Y8R::RBX));
         assert_eq!(0x02, machine.get_register(Y8R::RAX));
     }
 
     #[test]
     fn cmov_test() {
+
         let insts: [u8; 2 * 10 + 3 * 2] = [
             // IRMOVQ $9 $rax
             0x30, 0xF0, 0x09, 0, 0, 0, 0, 0, 0, 0, // IRMOVQ $4 $rbx
@@ -475,9 +456,10 @@ mod tests {
             0x23, 0x01, // cmovne rax rdx
             0x24, 0x02,
         ];
+        let mut ram = Ram::new(MEM_SIZE);
         let mut machine = SeqProcessor::new(0);
-        machine.load(0, &insts);
-        machine.start();
+        ram.load(0, &insts);
+        machine.start(&mut ram);
         assert_eq!(0, machine.get_register(Y8R::RCX));
         assert_eq!(9, machine.get_register(Y8R::RDX));
 
@@ -490,9 +472,10 @@ mod tests {
             0x23, 0x01, // cmovne rax rdx
             0x24, 0x02,
         ];
+        let mut ram = Ram::new(MEM_SIZE);
         let mut machine = SeqProcessor::new(0);
-        machine.load(0, &insts);
-        machine.start();
+        ram.load(0, &insts);
+        machine.start(&mut ram);
         assert_eq!(9, machine.get_register(Y8R::RCX));
         assert_eq!(0, machine.get_register(Y8R::RDX));
     }
