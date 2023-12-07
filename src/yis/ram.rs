@@ -19,6 +19,10 @@ impl Ram {
         self.memory[addr]
     }
 
+    pub fn write(&mut self, addr: usize, x: u8) {
+        self.memory[addr] = x;
+    }
+
     pub fn read_quad(&self, addr: usize) -> u64 {
         read_as_words(&self.memory, addr)
     }

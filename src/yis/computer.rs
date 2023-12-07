@@ -1,10 +1,11 @@
 use crate::yis::inst::Y8R;
 
-use super::{proc::SeqProcessor, ram::Ram, inst::Y8S};
+use super::{proc::SeqProcessor, ram::Ram, inst::Y8S, console::Console};
 
 pub struct Computer {
     proc: SeqProcessor,
     ram: Ram,
+    console: Console,
     verbose: i64,
     watch_memory_range: Option<(usize, usize)>,
 }
@@ -15,7 +16,8 @@ impl Computer {
             proc: SeqProcessor::new(verbose),
             ram: Ram::new(mem_size),
             verbose,
-            watch_memory_range
+            watch_memory_range,
+            console: Console::new(),
         }
     }
 
@@ -26,6 +28,7 @@ impl Computer {
     pub fn start(&mut self) -> Option<(u64, u64)> {
         for cyc in 0..1000 {
             let stat = self.proc.cycle(&mut self.ram);
+            self.console.cycle(&mut self.ram);
 
             if self.verbose >= 2 {
                 self.proc.print_registers();
