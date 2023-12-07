@@ -82,18 +82,37 @@ impl<'a> Tokenizer<'a> {
                     }
                 }
                 '0'..='9' => {
-                    let mut num = String::new();
-                    num.push(c);
-                    while let Some(&c) = self.peek() {
-                        match c {
-                            '0'..='9' => {
-                                num.push(c);
-                                self.next();
+                    if let Some('x') = self.peek() {
+                        self.next();
+                        let mut hex = String::new();
+                        hex.push('0');
+                        hex.push('x');
+                        while let Some(&c) = self.peek() {
+                            match c {
+                                '0'..='9' | 'a'..='f' | 'A'..='F' => {
+                                    hex.push(c);
+                                    self.next();
+                                }
+                                _ => break,
                             }
-                            _ => break,
                         }
+                        let without_prefix = hex.trim_start_matches("0x");
+                        let x = u64::from_str_radix(without_prefix, 16).unwrap();
+                        tokens.push((Token::Hex(x), ti));
+                    } else {
+                        let mut num = String::new();
+                        num.push(c);
+                        while let Some(&c) = self.peek() {
+                            match c {
+                                '0'..='9' => {
+                                    num.push(c);
+                                    self.next();
+                                }
+                                _ => break,
+                            }
+                        }
+                        tokens.push((Token::Num(num.parse::<u64>().unwrap()), ti));
                     }
-                    tokens.push((Token::Num(num.parse::<u64>().unwrap()), ti));
                 }
                 '"' => {
                     let mut s = String::new();
@@ -170,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_statement() {
-        let input = "while (a < 10) { if(a ==2) {int x = a + \"abc\"; return x; } }";
+        let input = "while (a < 10) { if(a ==0x1a) {int x = a + \"abc\"; return x; } }";
         let expe = vec![
             Token::While,
             Token::Op('('),
@@ -183,7 +202,7 @@ mod tests {
             Token::Op('('),
             Token::Id(String::from("a")),
             Token::Op2(['=', '=']),
-            Token::Num(2),
+            Token::Hex(0x1A),
             Token::Op(')'),
             Token::Op('{'),
             Token::Int,
