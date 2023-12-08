@@ -22,7 +22,7 @@ impl Console {
         }
     }
 
-    fn write(&self, ram :&Ram) {
+    fn write(&self, ram :&mut Ram) {
         let len = ram.read(0xE010);
         for i in 0..len {
             let c = ram.read(0xE100 + 8*i as usize);

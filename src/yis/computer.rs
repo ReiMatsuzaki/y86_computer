@@ -58,7 +58,7 @@ impl Computer {
         println!("stack:");
         for i in mini..(init_sp / 8) {
             let addr = init_sp - (i - mini + 1) * 8;
-            let x = self.ram.read_quad(addr as usize);
+            let x = self.ram.read_const_quad(addr as usize);
             print!("{0:>04X} : {1:X} ", addr, x);
             if addr == self.proc.get_register(Y8R::RBP) {
                 print!(" <- rbp");
