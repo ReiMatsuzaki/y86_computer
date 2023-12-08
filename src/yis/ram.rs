@@ -25,6 +25,7 @@ struct CacheSet {
 struct CacheLine {
     valid: bool,
     tag: u64,
+    unused_count: usize,
     data: Vec<u8>,
 }
 
@@ -32,10 +33,7 @@ impl Ram {
     pub fn new(mem_size: usize) -> Ram {
         let tag_bits = 48;
         let set_bits = 8;
-        let line_per_set = 4;
-        // let tag_bits = 0;
-        // let set_bits = 0;
-        // let line_per_set = 1;        
+        let line_per_set = 2;
         let offset_bits = 64 - tag_bits - set_bits;
         let data_len = (1u64 << (offset_bits as u32)) as usize;
         let set_len = (1u64 << (set_bits as u32)) as usize;
@@ -48,6 +46,7 @@ impl Ram {
                 lines: vec![CacheLine {
                     valid: false,
                     tag: 0,
+                    unused_count: 0,
                     data: vec![0; data_len],
                 }; line_per_set],
             }; set_len],
@@ -59,10 +58,16 @@ impl Ram {
 
     pub fn read(&mut self, addr: usize) -> u8 {
         let (t, s, offset) = self.split(addr);
-        match self.cache_sets[s as usize].lines.iter().find(|line| line.tag == t) {
+        for line in &mut self.cache_sets[s as usize].lines {
+            if line.valid {
+                line.unused_count += 1;
+            }
+        }
+        match self.cache_sets[s as usize].lines.iter_mut().find(|line| line.tag == t) {
             Some(line) if line.valid => {
                 // cache hit
                 self.read_cache_hit += 1;
+                line.unused_count = 0;
                 line.data[offset as usize]
             }
             _ => {
@@ -103,21 +108,48 @@ impl Ram {
     }
 
     fn fetch(&mut self, addr: usize) -> &CacheLine {
-        // FIXME: choice first line
         let (t, s, offset) = self.split(addr);
-        let line = &mut self.cache_sets[s as usize].lines[0];
+        let i =  match self.find_invalid_line_index(s) {
+            Some(i) => i,
+            None => self.find_lru_line_index(s),
+        };
+        let line = &mut self.cache_sets[s as usize].lines[i];
         line.valid = true;
         line.tag = t;
         let base_addr = addr - offset as usize;
 
-        // FIXME: duplicated ode
-        let data_len = (1u64 << (self.offset_bits as u32)) as usize;
+        let data_len = Self::pow2(self.offset_bits) as usize;
         for o in 0..data_len {
             let a = base_addr + o;
             line.data[o] = self.byte_array.read(a);
         }
 
         line
+    }
+
+    fn pow2(x: usize) -> u64 {
+        1u64 << (x as u32)
+    }
+
+    fn find_invalid_line_index(&self, s: u64) -> Option<usize> {
+        let cache_set = &self.cache_sets[s as usize];
+        for i in 0..cache_set.lines.len() {
+            if !cache_set.lines[i].valid {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    fn find_lru_line_index(&self, s: u64) -> usize {
+        let cache_set = &self.cache_sets[s as usize];
+        cache_set.lines.iter().enumerate().fold(0, |acc, (i, line)| {
+            if line.unused_count > cache_set.lines[acc].unused_count {
+                i
+            } else {
+                acc
+            }
+        })
     }
 
     pub fn load(&mut self, pos: usize, insts: &[u8]) {
@@ -191,6 +223,7 @@ mod tests {
             memory.write(0x60100 + i, (0x40 + i).try_into().unwrap());
             memory.write(0x90200 + i, (0x50 + i).try_into().unwrap());
         }
+        // memory.print_debug(1);
         memory.clean_cache();
         assert_eq!(memory.read(0x40100), 0x40);
         assert_eq!(memory.read(0x40101), 0x41);
