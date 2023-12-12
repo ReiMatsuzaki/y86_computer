@@ -1,4 +1,61 @@
 pub struct Ram {
+    memory: CashedMemory,
+    base: usize,
+    bound: usize,
+}
+
+impl Ram {
+    pub fn new(mem_size: usize) -> Ram {
+        Ram {
+            memory: CashedMemory::new(mem_size),
+            base: 0,
+            bound: 0x1_0000,
+        }
+    }
+
+    // pub fn set_base(&mut self, base: usize) {
+    //     self.base = base;
+    // }
+
+    fn addr(&self, vaddr: usize) -> usize {
+        assert!(vaddr <= self.bound);
+        self.base + vaddr
+    }
+
+    pub fn read(&mut self, addr: usize) -> u8 {
+        self.memory.read(self.addr(addr))
+    }
+
+    pub fn write(&mut self, addr: usize, value: u8) {
+        self.memory.write(self.addr(addr), value);
+    }
+
+    pub fn load(&mut self, pos: usize, insts: &[u8]) {
+        self.memory.load(self.addr(pos), insts);
+    }
+
+    pub fn size(&self) -> usize {
+        self.memory.size()
+    }
+
+    pub fn read_quad(&mut self, addr: usize) -> u64 {
+        self.memory.read_quad(self.addr(addr))
+    }
+
+    pub fn read_const_quad(&self, addr: usize) -> u64 {
+        self.memory.read_const_quad(self.addr(addr))
+    }
+
+    pub fn write_quad(&mut self, addr: usize, x: u64) {
+        self.memory.write_quad(self.addr(addr), x);
+    }
+
+    pub fn print(&self, start: Option<usize>, end: Option<usize>) {
+        self.memory.print(start, end);
+    }
+}
+
+pub struct CashedMemory {
     // represent cashed memory
     byte_array: ByteArray,
     // tag_bits: usize,
@@ -29,15 +86,15 @@ struct CacheLine {
     data: Vec<u8>,
 }
 
-impl Ram {
-    pub fn new(mem_size: usize) -> Ram {
+impl CashedMemory {
+    pub fn new(mem_size: usize) -> CashedMemory {
         let tag_bits = 48;
         let set_bits = 8;
         let line_per_set = 2;
         let offset_bits = 64 - tag_bits - set_bits;
         let data_len = (1u64 << (offset_bits as u32)) as usize;
         let set_len = (1u64 << (set_bits as u32)) as usize;
-        Ram {
+        CashedMemory {
             byte_array: ByteArray::new(mem_size),
             // tag_bits,
             set_bits,
@@ -188,7 +245,7 @@ impl Ram {
 }
 
 #[cfg(test)]
-impl Ram {
+impl CashedMemory {
     fn clean_cache(&mut self) {
         for set in &mut self.cache_sets {
             for line in &mut set.lines {
@@ -210,13 +267,13 @@ mod tests {
 
     #[test]
     fn test_cached_memory() {
-        let mut memory = Ram::new(1024);
+        let mut memory = CashedMemory::new(1024);
         let addr = 11;
         let x = 0x1234567890ABCDEF;
         memory.write_quad(addr, x);
         assert_eq!(x, memory.read_quad(addr));
 
-        let mut memory = Ram::new(1024*1024);
+        let mut memory = CashedMemory::new(1024*1024);
         for i in 0..3 {
             memory.write(0x40100 + i, (0x40 + i).try_into().unwrap());
             memory.write(0x50100 + i, (0x40 + i).try_into().unwrap());
