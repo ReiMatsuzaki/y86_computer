@@ -20,6 +20,9 @@ struct Args {
     #[arg(short, long, default_value_t = 0)]
     log_level: i64,
 
+    #[arg(short, long, default_value_t = 1)]
+    num_proc: usize,
+
     #[arg(short, long)]
     watch_memory_range: Option<String>,
 }
@@ -29,6 +32,7 @@ fn main() -> io::Result<()> {
     let command = &args.command;
     let filename = &args.filename;
     let log_level = &args.log_level;
+    let num_proc = &args.num_proc;
     let watch_memory_range = &args.watch_memory_range.as_ref();
     println!("command: {}", command);
     println!("filename: {}", filename);
@@ -42,6 +46,7 @@ fn main() -> io::Result<()> {
         }
     });
     println!("waching memory range: {:?}", wrange);
-    app::run(&filename, command, *log_level, wrange);
+    let res = app::run(&filename, command, *log_level, wrange, *num_proc);
+    println!("result: {}", res);
     Ok(())
 }

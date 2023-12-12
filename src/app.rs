@@ -8,7 +8,7 @@ const INIT_MEM_POS: usize = 0x1000; // 0x1000 = 4096
 const MEM_SIZE: usize = 1024 * 1024;
 
 // Y86_64 simulator
-pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize, usize)>) -> u64 {
+pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize, usize)>, num_proc: usize) -> u64 {
     let extension = Path::new(filename)
         .extension()
         .and_then(OsStr::to_str)
@@ -51,10 +51,16 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
         Err(e) => panic!("{}", e),
     };
 
+    // INIT_POS is meaning less.
     let mut computer = Computer::new(MEM_SIZE, INIT_MEM_POS, log_level, wrange);
 
     println!("load bytes to ram");
-    computer.load(0, &bytes);
+    for i in 0..num_proc {
+        computer.set_ram_base_bound(i * 0x1_0000, 0x1_0000);
+        computer.load(0, &bytes);
+    }
+    computer.set_ram_base_bound(0x0_0000, 0x1_0000);
+    
     if log_level >= 1 {
         computer.print_ram();
     }
@@ -92,7 +98,7 @@ mod tests {
         // let log_level = 2;
         let wrange = None;
         // let wrange = Some((0, 256));
-        run(filename, command, log_level, wrange)
+        run(filename, command, log_level, wrange, 1)
     }
 
     #[test]

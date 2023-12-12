@@ -1,4 +1,4 @@
-use crate::yis::{inst::Y8R, cpu::Cpu, ram::Ram};
+use crate::{yis::{inst::Y8R, cpu::Cpu, ram::Ram}, ycc::INIT_SP};
 
 pub struct Proc {
     pid: u32,
@@ -17,14 +17,22 @@ impl Proc {
                 rbx: 0,
                 rcx: 0,
                 rdx: 0,
-                rsp: 0,
+                rsp: INIT_SP,
                 rpb: 0,
-                pc: 0,
+                pc: 0x1000, // FIXME: 0x1000 is equal to INIT_POS in app.rs
             },
             state: ProcState::Ready,
             mem_base,
             mem_bound,
         }
+    }
+
+    pub fn get_pid(&self) -> u32 {
+        self.pid
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.state == ProcState::Ready
     }
 
     pub fn print(&self) {
@@ -69,6 +77,7 @@ struct Context {
     pc: usize,
 }
 
+#[derive(PartialEq)]
 enum ProcState {
     Ready,
     Running,

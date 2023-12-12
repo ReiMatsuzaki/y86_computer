@@ -12,9 +12,9 @@ yas2: ${BIN} ./y86/arithmetric.ys
 		@echo "test 21*(7-3) = 84 = 0x54"
 		${BIN} run ./y86/arithmetric.ys --log-level 0 --watch-memory-range 0:400
 
-ycc1: ${BIN} ./y86/plus.yc
+ycc1: ${BIN} ./y86/tests/plus.yc
 		@echo "test 2+4"
-		${BIN} run ./y86/plus.yc --log-level 0
+		${BIN} run ./y86/tests/plus.yc --log-level 1
 
 ycc2: ${BIN} ./y86/tests/arithmetric.yc
 		@echo "test (  2  + 4 ) * 6 - (9 / 2 - 2*3) - 5 = 33 = 0x21"
@@ -70,3 +70,7 @@ yas3: ${BIN} ./y86/tests/yas3_exception_div.ys
 ycc14: ${BIN} ./y86/tests/14exception.yc
 		@echo "test div 0 exception"
 		${BIN} run ./y86/tests/14exception.yc --log-level 0 --watch-memory-range 0:300
+
+ycc15: ${BIN} ./y86/tests/plus.yc
+		@echo "test 2+4 with two process"
+		${BIN} run ./y86/tests/plus.yc --log-level 2 --num-proc 2

@@ -23,7 +23,9 @@ impl Ram {
     }
 
     fn addr(&self, vaddr: usize) -> usize {
-        assert!(vaddr <= self.bound);
+        if vaddr > self.bound {
+            panic!("vaddr: {:#X} is out of bound", vaddr);
+        }
         self.base + vaddr
     }
 

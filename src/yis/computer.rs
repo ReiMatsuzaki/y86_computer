@@ -1,6 +1,6 @@
 use crate::yis::inst::Y8R;
 
-use super::{cpu::Cpu, ram::Ram, inst::Y8S, console::Console, yos::kernel::Kernel};
+use super::{cpu::Cpu, ram::Ram, inst::{Y8S, Exception}, console::Console, yos::kernel::Kernel};
 
 const MAX_CYCLE: u64 = 10000;
 pub struct Computer {
@@ -31,8 +31,15 @@ impl Computer {
     }
 
     pub fn start(&mut self) -> Option<(u64, u64)> {
+        self.kernel.start(&mut self.cpu, &mut self.ram);
         for cyc in 0..MAX_CYCLE {
             let res_cpu = self.cpu.cycle(&mut self.ram);
+            // FIXME: define timer here
+            let res_cpu = if cyc > 0 && cyc % 5 == 0 {
+                Err(Exception::TimerInterrupt)
+            } else {
+                res_cpu
+            };
             self.console.cycle(&mut self.ram);
             let stat = match res_cpu {
                 Ok(s) => s,
@@ -79,6 +86,10 @@ impl Computer {
             }
             println!("");
         }
+    }
+
+    pub fn set_ram_base_bound(&mut self, base: usize, bound: usize) {
+        self.ram.set_base_bound(base, bound);
     }
 
 }
