@@ -35,13 +35,6 @@ impl Proc {
         self.state == ProcState::Ready
     }
 
-    pub fn print(&self) {
-        print!("pid: {}  ", self.pid);
-        print!("mem_base: {}  ", self.mem_base);
-        print!("mem_bound: {}  ", self.mem_bound);
-        println!("");
-    }
-
     pub fn go_running(&mut self, cpu: &mut Cpu, ram: &mut Ram) {
         self.state = ProcState::Running;
         cpu.set_register(Y8R::RAX, self.context.rax);

@@ -15,7 +15,7 @@ pub struct Computer {
 impl Computer {
     pub fn new(mem_size: usize, verbose: i64, watch_memory_range: Option<(usize, usize)>) -> Computer {
         Computer {
-            cpu: Cpu::new(verbose),
+            cpu: Cpu::new(),
             ram: Ram::new(mem_size),
             verbose,
             watch_memory_range,
@@ -31,9 +31,15 @@ impl Computer {
     }
 
     pub fn start(&mut self) -> Option<(u64, u64)> {
+        if self.verbose >= 2 {
+            println!("");
+            println!("pid code        %rax %rbx")
+        }
+
         self.kernel.start(&mut self.cpu, &mut self.ram);
         for cyc in 0..MAX_CYCLE {
-            let res_cpu = self.cpu.cycle(&mut self.ram);
+            let running_pid = self.kernel.current_proc().get_pid();
+            let (fetched, res_cpu) = self.cpu.cycle(&mut self.ram);
             // FIXME: define timer here
             let res_cpu = if cyc > 0 && cyc % 5 == 0 {
                 Err(Exception::TimerInterrupt)
@@ -41,20 +47,24 @@ impl Computer {
                 res_cpu
             };
             self.console.cycle(&mut self.ram);
+
+            if self.verbose >= 2 {
+                print!("{0:>2} 0x{1:0>5X}: {2:>50}  ", running_pid, self.cpu.get_pc(), fetched);
+                print!("0x{0:0<4X}  0x{1:0<4X}", self.cpu.get_register(Y8R::RAX), self.cpu.get_register(Y8R::RBX));
+                println!("");
+                if self.verbose >= 3 {
+                    self.print_stack();
+                    self.print_ram();
+                    println!("");
+                }
+            }
+
             let stat = match res_cpu {
                 Ok(s) => s,
                 Err(e) => {
                     self.kernel.handle_exception(e, &mut self.cpu, &mut self.ram)
                 }
             };
-
-            if self.verbose >= 2 {
-                self.kernel.current_proc().print();
-                self.cpu.print_registers();
-                self.print_stack();
-                self.print_ram();
-                println!("");
-            }
 
             if stat == Y8S::HLT {
                 let rax = self.cpu.get_register(Y8R::RAX);

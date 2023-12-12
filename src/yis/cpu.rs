@@ -7,7 +7,7 @@ use super::ram::*;
 // const EXCEPTION_TABLE_BASE: usize = 0xE200;
 
 #[derive(Debug, Clone)]
-struct Fetched {
+pub struct Fetched {
     code_fn: CodeFn,
     ra: u8,
     rb: u8,
@@ -25,11 +25,32 @@ impl fmt::Display for Fetched {
         }
         let ra = g(self.ra);
         let rb = g(self.rb);
-        write!(
-            f,
-            "code_fn= {:?}, ra: {1:?}, rb: {2:?}, c: 0x{3:X}",
-            self.code_fn, ra, rb, self.val_c
-        )
+        match self.code_fn {
+            CodeFn::HALT |
+            CodeFn::NOP |
+            CodeFn::RET
+            => write!(f, "{:?}", self.code_fn),
+
+            CodeFn::RRMOVQ |
+            CodeFn::OPQ(_) |
+            CodeFn::CMOVXX(_)
+            => write!(f, "{:?}, {1},{2}", self.code_fn, ra, rb),
+
+            CodeFn::IRMOVQ
+            => write!(f, "{:?} ${1},{2}", self.code_fn, self.val_c, rb),
+            CodeFn::RMMOVQ |
+            CodeFn::MRMOVQ
+             => write!(f, "{:?} {1},0x{3:X}({2})", self.code_fn, ra, rb, self.val_c),
+
+            CodeFn::JXX(_) |
+            CodeFn::CALL 
+            => write!(f, "{:?} 0x{1:X}", self.code_fn, self.val_c),
+
+            CodeFn::PUSHQ |
+            CodeFn::POPQ
+            => write!(f, "{:?} {1}", self.code_fn, ra),
+
+        }
     }
 }
 
@@ -58,8 +79,6 @@ pub struct Cpu {
     sf: u8,
     of: u8,
     stat: Y8S,
-
-    verbose: i64,
 }
 
 
@@ -70,7 +89,7 @@ fn split_byte(x: u8) -> (u8, u8) {
 type Res<T> = Result<T, Exception>;
 
 impl Cpu {
-    pub fn new(verbose: i64) -> Cpu {
+    pub fn new() -> Cpu {
         let machine = Cpu {
             regs: [0; 16],
             pc: 0,
@@ -78,7 +97,6 @@ impl Cpu {
             sf: 0,
             of: 0,
             stat: Y8S::AOK,
-            verbose,    
         };
         return machine;
     }
@@ -277,50 +295,19 @@ impl Cpu {
             _ => f.val_p,
         };
     }
-    pub fn print_registers(&self) {
-        print!("pc=0x{0:0>2X}, ", self.pc);
-        print!("RAX=0x{0:X}, RBX=0x{1:X}, RCX=0x{2:X}, RDX=0x{3:X}, RSP=0x{4:X}, RBP=0x{5:X}, RSI=0x{6:X}, RDI=0x{7:X}, ",
-          self.get_register(Y8R::RAX),
-          self.get_register(Y8R::RBX),
-          self.get_register(Y8R::RCX),
-          self.get_register(Y8R::RDX),
-          self.get_register(Y8R::RSP),
-          self.get_register(Y8R::RBP),
-          self.get_register(Y8R::RSI),
-          self.get_register(Y8R::RDI),
-      );
-        println!("ZF={0}, SF={1}", self.zf, self.sf);
-        // println!(" R8=0x{0:X},  R9=0x{1:X}, R10=0x{2:X}, R11=0x{3:X}",
-        //     self.regs[Y8R::R8 as usize],
-        //     self.regs[Y8R::R9 as usize],
-        //     self.regs[Y8R::R10 as usize],
-        //     self.regs[Y8R::R11 as usize],
-        // );
-    }
-    pub fn cycle(&mut self, ram: &mut Ram) -> Res<Y8S> {
-        let fetched = self.fetch(ram)?;
-        if self.verbose >= 2 {
-            println!("fetched: {}", fetched);
-        }
-        let decoded = self.decode(&fetched)?;
-        if self.verbose >= 3 {
-            println!("{:?}", decoded);
-        }
-        let executed = self.execute(&fetched, &decoded)?;
-        if self.verbose >= 3 {
-            println!("{:?}", executed);
-        }
-        let memoried = self.memory(&fetched, &decoded, &executed, ram)?;
-        if self.verbose >= 3 {
-            println!("{:?}", memoried);
-        }
+
+    pub fn cycle(&mut self, ram: &mut Ram) -> (Fetched, Res<Y8S>) {
+        let fetched = self.fetch(ram).unwrap();
+        let decoded = self.decode(&fetched).unwrap();
+        let executed = self.execute(&fetched, &decoded).unwrap();
+        let memoried = self.memory(&fetched, &decoded, &executed, ram).unwrap();
         self.write(&fetched, &decoded, &executed, &memoried);
 
         if fetched.code_fn == CodeFn::OPQ(OpqFn::DIV) && decoded.val_a == 0 {
-            return Err(Exception::DivideError);
+            return (fetched, Err(Exception::DivideError));
         }
 
-        Ok(self.stat.clone())
+        (fetched, Ok(self.stat.clone()))
     }
     pub fn get_register(&self, r: Y8R) -> u64 {
         return self.regs[r as usize];
@@ -340,7 +327,7 @@ impl Cpu {
 impl Cpu {
     pub fn start(&mut self, ram: &mut Ram) -> Option<u64> {
         for cyc in 0..1000 {
-            self.cycle(ram).unwrap();
+            let _ = self.cycle(ram);
             // self.print_registers();
             // ram.print(Some(0x00), Some(0x90));
             if self.stat == Y8S::HLT {
@@ -412,7 +399,7 @@ mod tests {
             0x61, 0x23,
             // -> rdx=0x09, rbx=-5
         ];
-        let mut machine = Cpu::new(0);
+        let mut machine = Cpu::new();
         ram.load(0, &insts);
         machine.start(&mut ram);
         let neg: u64 = 5;
@@ -426,7 +413,7 @@ mod tests {
             // addq rdx rbx
             0x60, 0x23, // -> rbx=4
         ];
-        let mut machine = Cpu::new(0);
+        let mut machine = Cpu::new();
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0x04, machine.get_register(Y8R::RBX));
@@ -443,7 +430,7 @@ mod tests {
             0x65, 0x20,
             // -> rax=0x02
         ];
-        let mut machine = Cpu::new(0);
+        let mut machine = Cpu::new();
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0x24, machine.get_register(Y8R::RBX));
@@ -463,7 +450,7 @@ mod tests {
             0x24, 0x02,
         ];
         let mut ram = Ram::new(MEM_SIZE);
-        let mut machine = Cpu::new(0);
+        let mut machine = Cpu::new();
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0, machine.get_register(Y8R::RCX));
@@ -479,7 +466,7 @@ mod tests {
             0x24, 0x02,
         ];
         let mut ram = Ram::new(MEM_SIZE);
-        let mut machine = Cpu::new(0);
+        let mut machine = Cpu::new();
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(9, machine.get_register(Y8R::RCX));
