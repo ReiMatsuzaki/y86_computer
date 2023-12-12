@@ -35,21 +35,21 @@ impl fmt::Display for Fetched {
             CodeFn::RRMOVQ |
             CodeFn::OPQ(_) |
             CodeFn::CMOVXX(_)
-            => write!(f, "{:8} {1:<5},{2}", ff, ra, rb),
+            => write!(f, "{:8} {1:<6},{2}", ff, ra, rb),
 
             CodeFn::IRMOVQ
-            => write!(f, "{:8} $0x{1:<2X},{2}", ff, self.val_c, rb),
+            => write!(f, "{:8} $0x{1:<3X},{2}", ff, self.val_c, rb),
             CodeFn::RMMOVQ |
             CodeFn::MRMOVQ
-             => write!(f, "{:8} {1},{3:5X}({2})", ff, ra, rb, self.val_c),
+             => write!(f, "{:8} {1},{3:6X}({2})", ff, ra, rb, self.val_c),
 
             CodeFn::JXX(_) |
             CodeFn::CALL 
-            => write!(f, "{:8} {1:<5X}", ff, self.val_c),
+            => write!(f, "{:8} {1:<6X}", ff, self.val_c),
 
             CodeFn::PUSHQ |
             CodeFn::POPQ
-            => write!(f, "{:8} {1:<5}", ff, ra)
+            => write!(f, "{:8} {1:<6}", ff, ra)
         }
     }
 }

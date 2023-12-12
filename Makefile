@@ -73,4 +73,4 @@ ycc14: ${BIN} ./y86/tests/14exception.yc
 
 ycc15: ${BIN} ./y86/tests/plus.yc
 		@echo "test 2+4 with two process"
-		${BIN} run ./y86/tests/plus.yc --log-level 2 --num-proc 2
+		${BIN} run ./y86/tests/plus.yc --log-level 2 --num-proc 2 -w rax,rbx

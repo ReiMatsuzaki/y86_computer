@@ -1,14 +1,14 @@
 use std::{ffi::OsStr, path::Path};
 
 use crate::{
-    yas, ycc, yis::computer::Computer,
+    yas, ycc, yis::computer::Computer, yis::computer::Watching
 };
 
 // const INIT_MEM_POS: usize = 0x1000; // 0x1000 = 4096
 const MEM_SIZE: usize = 1024 * 1024;
 
 // Y86_64 simulator
-pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize, usize)>, num_proc: usize) -> u64 {
+pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize, usize)>, num_proc: usize, display_opts: Vec<Watching>) -> u64 {
     let extension = Path::new(filename)
         .extension()
         .and_then(OsStr::to_str)
@@ -73,7 +73,7 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
         if log_level >= 0 {
             println!("yis start");
         }
-        let maybe_res = computer.start();
+        let maybe_res = computer.start(display_opts);
         match maybe_res {
             Some((cycle, res)) => {
                 if log_level >= 0 {
@@ -98,7 +98,7 @@ mod tests {
         // let log_level = 2;
         let wrange = None;
         // let wrange = Some((0, 256));
-        run(filename, command, log_level, wrange, 1)
+        run(filename, command, log_level, wrange, 1, vec![])
     }
 
     #[test]

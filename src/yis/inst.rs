@@ -21,6 +21,26 @@ pub enum Y8R {
     R11 = 0xB,
 }
 
+impl Y8R {
+    pub fn from_str(s: &str) -> Option<Y8R> {
+        match s {
+            "rax" => Some(Y8R::RAX),
+            "rcx" => Some(Y8R::RCX),
+            "rdx" => Some(Y8R::RDX),
+            "rbx" => Some(Y8R::RBX),
+            "rsp" => Some(Y8R::RSP),
+            "rbp" => Some(Y8R::RBP),
+            "rsi" => Some(Y8R::RSI),
+            "rdi" => Some(Y8R::RDI),
+            "r8" => Some(Y8R::R8),
+            "r9" => Some(Y8R::R9),
+            "r10" => Some(Y8R::R10),
+            "r11" => Some(Y8R::R11),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Y8S {
     AOK = 0x1,
