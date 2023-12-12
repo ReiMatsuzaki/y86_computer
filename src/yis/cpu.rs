@@ -328,6 +328,12 @@ impl Cpu {
     pub fn set_register(&mut self, r: Y8R, value: u64) {
         self.regs[r as usize] = value;
     }
+    pub fn set_pc(&mut self, pc: usize) {
+        self.pc = pc;
+    }
+    pub fn get_pc(&self) -> usize {
+        self.pc
+    }
 }
 
 #[cfg(test)]

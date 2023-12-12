@@ -13,9 +13,14 @@ impl Ram {
         }
     }
 
-    // pub fn set_base(&mut self, base: usize) {
-    //     self.base = base;
-    // }
+    pub fn get_base_bound(&self) -> (usize, usize) {
+        (self.base, self.bound)
+    }
+
+    pub fn set_base_bound(&mut self, base: usize, bound: usize) {
+        self.base = base;
+        self.bound = bound;
+    }
 
     fn addr(&self, vaddr: usize) -> usize {
         assert!(vaddr <= self.bound);

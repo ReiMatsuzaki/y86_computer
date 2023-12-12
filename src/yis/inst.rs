@@ -1,7 +1,8 @@
 #[derive(Debug)]
 pub enum Exception {
     DivideError,
-    ProtectionFault
+    ProtectionFault,
+    TimerInterrupt,
 }
 
 #[derive(Debug, PartialEq, Clone)]

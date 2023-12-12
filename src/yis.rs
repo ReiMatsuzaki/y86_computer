@@ -3,7 +3,7 @@ pub(crate) mod cpu;
 pub(crate) mod inst;
 pub(crate) mod ram;
 pub(crate) mod console;
-pub(crate) mod kernel;
+pub(crate) mod yos;
 
 // assign 4kB(=4096 byte) for each process
 // proc0: 0x0000 - 0x1FFF

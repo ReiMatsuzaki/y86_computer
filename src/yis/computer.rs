@@ -1,6 +1,6 @@
 use crate::yis::inst::Y8R;
 
-use super::{cpu::Cpu, ram::Ram, inst::Y8S, console::Console, kernel::Kernel};
+use super::{cpu::Cpu, ram::Ram, inst::Y8S, console::Console, yos::kernel::Kernel};
 
 const MAX_CYCLE: u64 = 10000;
 pub struct Computer {
@@ -26,6 +26,8 @@ impl Computer {
 
     pub fn load(&mut self, pos: usize, insts: &[u8]) {
         self.ram.load(pos, insts);
+        let (base, bound) = self.ram.get_base_bound();
+        self.kernel.add_proc(base, bound);
     }
 
     pub fn start(&mut self) -> Option<(u64, u64)> {
@@ -35,11 +37,12 @@ impl Computer {
             let stat = match res_cpu {
                 Ok(s) => s,
                 Err(e) => {
-                    self.kernel.handle_exception(e, &mut self.cpu)
+                    self.kernel.handle_exception(e, &mut self.cpu, &mut self.ram)
                 }
             };
 
             if self.verbose >= 2 {
+                self.kernel.current_proc().print();
                 self.cpu.print_registers();
                 self.print_stack();
                 self.print_ram();
