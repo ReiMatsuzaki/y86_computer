@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub enum ProcError {
+pub enum Exception {
     DivideError,
     ProtectionFault
 }

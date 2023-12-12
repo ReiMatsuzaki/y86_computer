@@ -1,6 +1,6 @@
 use crate::yis::inst::Y8R;
 
-use super::{inst::{ProcError, Y8S}, proc::SeqProcessor};
+use super::{inst::{Exception, Y8S}, cpu::Cpu};
 
 pub struct Kernel {
 
@@ -11,11 +11,11 @@ impl Kernel {
         Kernel {}
     }
 
-    pub fn handle_exception(&self, e: ProcError, proccessor: &mut SeqProcessor) -> Y8S {
+    pub fn handle_exception(&self, e: Exception, cpu: &mut Cpu) -> Y8S {
         match e {
-            ProcError::DivideError => {
+            Exception::DivideError => {
                 println!("Kernel: divide by zero error found. Replace result with 1");
-                proccessor.set_register(Y8R::RAX, 1);
+                cpu.set_register(Y8R::RAX, 1);
                 Y8S::AOK
             },
             _ => {

@@ -1,10 +1,10 @@
 use crate::yis::inst::Y8R;
 
-use super::{proc::SeqProcessor, ram::Ram, inst::Y8S, console::Console, kernel::Kernel};
+use super::{cpu::Cpu, ram::Ram, inst::Y8S, console::Console, kernel::Kernel};
 
 const MAX_CYCLE: u64 = 10000;
 pub struct Computer {
-    proc: SeqProcessor,
+    cpu: Cpu,
     ram: Ram,
     console: Console,
     kernel: Kernel,
@@ -15,7 +15,7 @@ pub struct Computer {
 impl Computer {
     pub fn new(mem_size: usize, pc: usize, verbose: i64, watch_memory_range: Option<(usize, usize)>) -> Computer {
         Computer {
-            proc: SeqProcessor::new(verbose, pc),
+            cpu: Cpu::new(verbose, pc),
             ram: Ram::new(mem_size),
             verbose,
             watch_memory_range,
@@ -30,24 +30,24 @@ impl Computer {
 
     pub fn start(&mut self) -> Option<(u64, u64)> {
         for cyc in 0..MAX_CYCLE {
-            let res_proc = self.proc.cycle(&mut self.ram);
+            let res_cpu = self.cpu.cycle(&mut self.ram);
             self.console.cycle(&mut self.ram);
-            let stat = match res_proc {
+            let stat = match res_cpu {
                 Ok(s) => s,
                 Err(e) => {
-                    self.kernel.handle_exception(e, &mut self.proc)
+                    self.kernel.handle_exception(e, &mut self.cpu)
                 }
             };
 
             if self.verbose >= 2 {
-                self.proc.print_registers();
+                self.cpu.print_registers();
                 self.print_stack();
                 self.print_ram();
                 println!("");
             }
 
             if stat == Y8S::HLT {
-                let rax = self.proc.get_register(Y8R::RAX);
+                let rax = self.cpu.get_register(Y8R::RAX);
                 return Some((cyc, rax));
             }
         }
@@ -62,16 +62,16 @@ impl Computer {
 
     fn print_stack(&self) {
         let init_sp = crate::ycc::INIT_SP;
-        let mini = self.proc.get_register(Y8R::RSP) / 8;
+        let mini = self.cpu.get_register(Y8R::RSP) / 8;
         println!("stack:");
         for i in mini..(init_sp / 8) {
             let addr = init_sp - (i - mini + 1) * 8;
             let x = self.ram.read_const_quad(addr as usize);
             print!("{0:>04X} : {1:X} ", addr, x);
-            if addr == self.proc.get_register(Y8R::RBP) {
+            if addr == self.cpu.get_register(Y8R::RBP) {
                 print!(" <- rbp");
             }
-            if addr == self.proc.get_register(Y8R::RSP) {
+            if addr == self.cpu.get_register(Y8R::RSP) {
                 print!(" <- rsp");
             }
             println!("");

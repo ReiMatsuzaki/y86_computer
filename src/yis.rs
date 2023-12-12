@@ -1,5 +1,5 @@
 pub(crate) mod computer;
-pub(crate) mod proc;
+pub(crate) mod cpu;
 pub(crate) mod inst;
 pub(crate) mod ram;
 pub(crate) mod console;

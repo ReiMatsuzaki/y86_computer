@@ -51,20 +51,13 @@ pub struct Memoried {
     val_m: u64,
 }
 
-// FIXME: rename?
-pub struct SeqProcessor {
+pub struct Cpu {
     regs: [u64; 16],
     pc: usize,
     zf: u8,
     sf: u8,
     of: u8,
     stat: Y8S,
-
-    exception: bool,
-    ecf_regs: [u64; 16],
-    ecf_pc: usize,
-    ecf_zf: u8,
-    ecf_sf: u8,
 
     verbose: i64,
 }
@@ -74,23 +67,18 @@ fn split_byte(x: u8) -> (u8, u8) {
     return (x >> 4, x & 0x0F);
 }
 
-type Res<T> = Result<T, ProcError>;
+type Res<T> = Result<T, Exception>;
 
-impl SeqProcessor {
-    pub fn new(verbose: i64, pc: usize) -> SeqProcessor {
-        let machine = SeqProcessor {
+impl Cpu {
+    pub fn new(verbose: i64, pc: usize) -> Cpu {
+        let machine = Cpu {
             regs: [0; 16],
             pc,
             zf: 0,
             sf: 0,
             of: 0,
             stat: Y8S::AOK,
-            verbose,
-            exception: false,
-            ecf_regs: [0; 16],
-            ecf_pc: 0,
-            ecf_zf: 0,
-            ecf_sf: 0,            
+            verbose,    
         };
         return machine;
     }
@@ -233,7 +221,7 @@ impl SeqProcessor {
             CodeFn::RMMOVQ => {
                 let addr = e.val_e as usize;
                 if ram.size() <= addr {
-                    return Err(ProcError::ProtectionFault);
+                    return Err(Exception::ProtectionFault);
                 }
                 ram.write_quad(addr, d.val_a);
                 0
@@ -310,40 +298,6 @@ impl SeqProcessor {
         // );
     }
     pub fn cycle(&mut self, ram: &mut Ram) -> Res<Y8S> {
-        // FIXME: remove these old exception control flow variables
-        if self.exception && ram.read(self.pc) == 0x90 { 
-            // recover if return in exception
-            self.exception = false;
-            self.pc = self.ecf_pc;
-            self.regs = self.ecf_regs;
-            self.zf = self.ecf_zf;
-            self.sf = self.ecf_sf;
-        }
-        self.cycle_in(ram)
-        // match self.cycle_in(ram) {
-        //     Ok(s) => s,
-        //     Err(e) => {
-        //         // FIXME: remove these old exception control flow variables
-        //         self.exception = true;
-        //         // save current register
-        //         self.ecf_pc = self.pc;
-        //         self.ecf_regs = self.regs;
-        //         self.ecf_zf = self.zf;
-        //         self.ecf_sf = self.sf;
-        //         // jump 
-        //         let exception_number = match e {
-        //             ProcError::DivideError => 0,
-        //             ProcError::ProtectionFault => 1,
-        //         };
-        //         let e_handler_addr = ram.read_quad(EXCEPTION_TABLE_BASE + exception_number * 8);
-        //         // println!("error ditected. new pc={}", e_handler_addr);
-        //         self.pc = e_handler_addr as usize;
-        //         Y8S::AOK
-        //     },
-        // }
-        
-    }
-    fn cycle_in(&mut self, ram: &mut Ram) -> Res<Y8S> {
         let fetched = self.fetch(ram)?;
         if self.verbose >= 2 {
             println!("fetched: {}", fetched);
@@ -363,7 +317,7 @@ impl SeqProcessor {
         self.write(&fetched, &decoded, &executed, &memoried);
 
         if fetched.code_fn == CodeFn::OPQ(OpqFn::DIV) && decoded.val_a == 0 {
-            return Err(ProcError::DivideError);
+            return Err(Exception::DivideError);
         }
 
         Ok(self.stat.clone())
@@ -377,7 +331,7 @@ impl SeqProcessor {
 }
 
 #[cfg(test)]
-impl SeqProcessor {
+impl Cpu {
     pub fn start(&mut self, ram: &mut Ram) -> Option<u64> {
         for cyc in 0..1000 {
             self.cycle(ram).unwrap();
@@ -452,7 +406,7 @@ mod tests {
             0x61, 0x23,
             // -> rdx=0x09, rbx=-5
         ];
-        let mut machine = SeqProcessor::new(0, 0);
+        let mut machine = Cpu::new(0, 0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         let neg: u64 = 5;
@@ -466,7 +420,7 @@ mod tests {
             // addq rdx rbx
             0x60, 0x23, // -> rbx=4
         ];
-        let mut machine = SeqProcessor::new(0, 0);
+        let mut machine = Cpu::new(0, 0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0x04, machine.get_register(Y8R::RBX));
@@ -483,7 +437,7 @@ mod tests {
             0x65, 0x20,
             // -> rax=0x02
         ];
-        let mut machine = SeqProcessor::new(0, 0);
+        let mut machine = Cpu::new(0, 0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0x24, machine.get_register(Y8R::RBX));
@@ -503,7 +457,7 @@ mod tests {
             0x24, 0x02,
         ];
         let mut ram = Ram::new(MEM_SIZE);
-        let mut machine = SeqProcessor::new(0, 0);
+        let mut machine = Cpu::new(0, 0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0, machine.get_register(Y8R::RCX));
@@ -519,7 +473,7 @@ mod tests {
             0x24, 0x02,
         ];
         let mut ram = Ram::new(MEM_SIZE);
-        let mut machine = SeqProcessor::new(0, 0);
+        let mut machine = Cpu::new(0, 0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(9, machine.get_register(Y8R::RCX));
