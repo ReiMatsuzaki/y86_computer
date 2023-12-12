@@ -12,9 +12,9 @@ pub struct Computer {
 }
 
 impl Computer {
-    pub fn new(mem_size: usize, verbose: i64, watch_memory_range: Option<(usize, usize)>) -> Computer {
+    pub fn new(mem_size: usize, pc: usize, verbose: i64, watch_memory_range: Option<(usize, usize)>) -> Computer {
         Computer {
-            proc: SeqProcessor::new(verbose),
+            proc: SeqProcessor::new(verbose, pc),
             ram: Ram::new(mem_size),
             verbose,
             watch_memory_range,

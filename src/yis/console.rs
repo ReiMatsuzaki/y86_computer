@@ -4,10 +4,10 @@ pub struct Console {}
 
 // Rule
 // M[addr] is memory byte at address addr
-// M[0xE000] = 0 => do nothing
+// M[0x0100] = 0 => do nothing
 //           = 1 => write bytes at console
-// M[0xE010] = length of bytes
-// M[0xE100 .. 0xE1FF] is buffer
+// M[0x0110] = length of bytes
+// M[0x0120] = bytes address
 
 impl Console {
     pub fn new() -> Console {
@@ -15,17 +15,19 @@ impl Console {
     }
 
     pub fn cycle(&self, ram: &mut Ram) {
-        let flag = ram.read(0xE000);
+        let flag = ram.read(0x0100);
         if flag == 1 {
             self.write(ram);
-            ram.write(0xE000, 0);
+            ram.write(0x0100, 0);
         }
     }
 
     fn write(&self, ram :&mut Ram) {
-        let len = ram.read(0xE010);
+        let len = ram.read(0x0110);
+        let addr = ram.read_quad(0x0120) as usize;
         for i in 0..len {
-            let c = ram.read(0xE100 + 8*i as usize);
+            let i = i as usize;
+            let c = ram.read(addr + 8*i);
             print!("{}", c as char);
         }
     }

@@ -4,7 +4,8 @@ use crate::{
     yas, ycc, yis::computer::Computer,
 };
 
-const MEM_SIZE: usize = 0x10000;
+const INIT_MEM_POS: usize = 0x1000; // 0x1000 = 4096
+const MEM_SIZE: usize = 1024 * 1024;
 
 // Y86_64 simulator
 pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize, usize)>) -> u64 {
@@ -44,13 +45,13 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
         println!("yas coder start");
     }
     let mut bytes: Vec<u8> = Vec::new();
-    bytes.resize(MEM_SIZE, 0x00);
+    bytes.resize(16*16*16*16, 0x00);
     let bytes = match yas::write_bytes(statements, bytes) {
         Ok(a) => a,
         Err(e) => panic!("{}", e),
     };
 
-    let mut computer = Computer::new(MEM_SIZE, log_level, wrange);
+    let mut computer = Computer::new(MEM_SIZE, INIT_MEM_POS, log_level, wrange);
 
     println!("load bytes to ram");
     computer.load(0, &bytes);

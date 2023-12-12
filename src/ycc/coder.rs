@@ -22,6 +22,7 @@ impl Coder {
         let mut codes = vec![];
         codes.append(&mut vec![
             // initialize stack pointer and meaning less base pointer
+            Code::Directive(Directive::Pos(0x1000)),
             Code::Irmovq(Register::RSP, Expr::Value(INIT_SP)),
             Code::Irmovq(Register::RBP, Expr::Value(INIT_SP + 10)),
             Code::Call(Expr::Label("main".to_string())),
