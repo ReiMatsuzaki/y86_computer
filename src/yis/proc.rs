@@ -4,7 +4,7 @@ use super::inst::*;
 use super::ram::*;
 
 // const MEM_SIZE: usize = 0x10000;
-const EXCEPTION_TABLE_BASE: usize = 0xE200;
+// const EXCEPTION_TABLE_BASE: usize = 0xE200;
 
 #[derive(Debug, Clone)]
 struct Fetched {
@@ -69,10 +69,6 @@ pub struct SeqProcessor {
     verbose: i64,
 }
 
-enum ProcError {
-    DivideError,
-    ProtectionFault
-}
 
 fn split_byte(x: u8) -> (u8, u8) {
     return (x >> 4, x & 0x0F);
@@ -313,7 +309,8 @@ impl SeqProcessor {
         //     self.regs[Y8R::R11 as usize],
         // );
     }
-    pub fn cycle(&mut self, ram: &mut Ram) -> Y8S {
+    pub fn cycle(&mut self, ram: &mut Ram) -> Res<Y8S> {
+        // FIXME: remove these old exception control flow variables
         if self.exception && ram.read(self.pc) == 0x90 { 
             // recover if return in exception
             self.exception = false;
@@ -322,26 +319,28 @@ impl SeqProcessor {
             self.zf = self.ecf_zf;
             self.sf = self.ecf_sf;
         }
-        match self.cycle_in(ram) {
-            Ok(s) => s,
-            Err(e) => {
-                self.exception = true;
-                // save current register
-                self.ecf_pc = self.pc;
-                self.ecf_regs = self.regs;
-                self.ecf_zf = self.zf;
-                self.ecf_sf = self.sf;
-                // jump 
-                let exception_number = match e {
-                    ProcError::DivideError => 0,
-                    ProcError::ProtectionFault => 1,
-                };
-                let e_handler_addr = ram.read_quad(EXCEPTION_TABLE_BASE + exception_number * 8);
-                // println!("error ditected. new pc={}", e_handler_addr);
-                self.pc = e_handler_addr as usize;
-                Y8S::AOK
-            },
-        }
+        self.cycle_in(ram)
+        // match self.cycle_in(ram) {
+        //     Ok(s) => s,
+        //     Err(e) => {
+        //         // FIXME: remove these old exception control flow variables
+        //         self.exception = true;
+        //         // save current register
+        //         self.ecf_pc = self.pc;
+        //         self.ecf_regs = self.regs;
+        //         self.ecf_zf = self.zf;
+        //         self.ecf_sf = self.sf;
+        //         // jump 
+        //         let exception_number = match e {
+        //             ProcError::DivideError => 0,
+        //             ProcError::ProtectionFault => 1,
+        //         };
+        //         let e_handler_addr = ram.read_quad(EXCEPTION_TABLE_BASE + exception_number * 8);
+        //         // println!("error ditected. new pc={}", e_handler_addr);
+        //         self.pc = e_handler_addr as usize;
+        //         Y8S::AOK
+        //     },
+        // }
         
     }
     fn cycle_in(&mut self, ram: &mut Ram) -> Res<Y8S> {
@@ -372,13 +371,16 @@ impl SeqProcessor {
     pub fn get_register(&self, r: Y8R) -> u64 {
         return self.regs[r as usize];
     }
+    pub fn set_register(&mut self, r: Y8R, value: u64) {
+        self.regs[r as usize] = value;
+    }
 }
 
 #[cfg(test)]
 impl SeqProcessor {
     pub fn start(&mut self, ram: &mut Ram) -> Option<u64> {
         for cyc in 0..1000 {
-            self.cycle(ram);
+            self.cycle(ram).unwrap();
             // self.print_registers();
             // ram.print(Some(0x00), Some(0x90));
             if self.stat == Y8S::HLT {
@@ -405,7 +407,7 @@ mod tests {
     // #[test]
     // fn seq_processor_test() {
     //     let mut ram = Ram::new(MEM_SIZE);
-    //     let mut machine = SeqProcessor::new(2);
+    //     let mut machine = SeqProcessor::new(2, 0);
     //     let insts: [u8; 4 * 10 + 2 * 9 + 3 * 2 + 2 * 1] = [
     //         // 0x00: IRMOVQ $9  $rdx
     //         0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0, 
@@ -443,18 +445,18 @@ mod tests {
     #[test]
     fn opq_test() {
         let mut ram = Ram::new(MEM_SIZE);
-        // let insts: [u8; 2 * 10 + 2] = [
-        //     // IRMOVQ $9  $rdx
-        //     0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0, // IRMOVQ $4 $rbx
-        //     0x30, 0xF3, 0x04, 0, 0, 0, 0, 0, 0, 0, // subq rdx rbx
-        //     0x61, 0x23,
-        //     // -> rdx=0x09, rbx=-5
-        // ];
-        // let mut machine = SeqProcessor::new(0);
-        // ram.load(0, &insts);
-        // machine.start(&mut ram);
-        // let neg: u64 = 5;
-        // assert_eq!(0, neg.wrapping_add(machine.get_register(Y8R::RBX)));
+        let insts: [u8; 2 * 10 + 2] = [
+            // IRMOVQ $9  $rdx
+            0x30, 0xF2, 0x09, 0, 0, 0, 0, 0, 0, 0, // IRMOVQ $4 $rbx
+            0x30, 0xF3, 0x04, 0, 0, 0, 0, 0, 0, 0, // subq rdx rbx
+            0x61, 0x23,
+            // -> rdx=0x09, rbx=-5
+        ];
+        let mut machine = SeqProcessor::new(0, 0);
+        ram.load(0, &insts);
+        machine.start(&mut ram);
+        let neg: u64 = 5;
+        assert_eq!(0, neg.wrapping_add(machine.get_register(Y8R::RBX)));
 
         let insts: [u8; 2 * 10 + 2 * 2] = [
             // IRMOVQ $9 $rdx

@@ -66,4 +66,7 @@ ycc13: ${BIN} ./y86/tests/13console.yc
 
 yas3: ${BIN} ./y86/tests/yas3_exception_div.ys
 		${BIN} run ./y86/tests/yas3_exception_div.ys --log-level 2
-	
+
+ycc14: ${BIN} ./y86/tests/14exception.yc
+		@echo "test div 0 exception"
+		${BIN} run ./y86/tests/14exception.yc --log-level 0 --watch-memory-range 0:300

@@ -1,12 +1,13 @@
 use crate::yis::inst::Y8R;
 
-use super::{proc::SeqProcessor, ram::Ram, inst::Y8S, console::Console};
+use super::{proc::SeqProcessor, ram::Ram, inst::Y8S, console::Console, kernel::Kernel};
 
 const MAX_CYCLE: u64 = 10000;
 pub struct Computer {
     proc: SeqProcessor,
     ram: Ram,
     console: Console,
+    kernel: Kernel,
     verbose: i64,
     watch_memory_range: Option<(usize, usize)>,
 }
@@ -19,6 +20,7 @@ impl Computer {
             verbose,
             watch_memory_range,
             console: Console::new(),
+            kernel: Kernel::new(),
         }
     }
 
@@ -28,8 +30,14 @@ impl Computer {
 
     pub fn start(&mut self) -> Option<(u64, u64)> {
         for cyc in 0..MAX_CYCLE {
-            let stat = self.proc.cycle(&mut self.ram);
+            let res_proc = self.proc.cycle(&mut self.ram);
             self.console.cycle(&mut self.ram);
+            let stat = match res_proc {
+                Ok(s) => s,
+                Err(e) => {
+                    self.kernel.handle_exception(e, &mut self.proc)
+                }
+            };
 
             if self.verbose >= 2 {
                 self.proc.print_registers();

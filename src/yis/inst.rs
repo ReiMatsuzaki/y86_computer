@@ -1,3 +1,9 @@
+#[derive(Debug)]
+pub enum ProcError {
+    DivideError,
+    ProtectionFault
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Y8R {
     RAX = 0x0,
