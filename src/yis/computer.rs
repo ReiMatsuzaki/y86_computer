@@ -1,6 +1,6 @@
 use crate::yis::inst::Y8R;
 
-use super::{cpu::Cpu, ram::Ram, inst::{Y8S, Exception}, console::Console, yos::kernel::Kernel};
+use super::{cpu::{Cpu, Fetched}, ram::Ram, inst::{Y8S, Exception}, console::Console, yos::kernel::Kernel};
 
 const MAX_CYCLE: u64 = 10000;
 
@@ -36,44 +36,18 @@ impl Computer {
         self.kernel.add_proc(base, bound);
     }
 
-    pub fn start(&mut self, watchings: Vec<Watching>) -> Option<(u64, u64)> {
+    pub fn start(&mut self, watchings: &Vec<Watching>) -> Option<(u64, u64)> {
         if self.verbose >= 2 {
-            println!("");
-            for watching in &watchings {
-                match watching {
-                    Watching::Reg(r) => {
-                        let r = format!("{0:?}", r).to_ascii_lowercase();
-                        print!(" %{0:<7}", r)
-                    },
-                    Watching::Mem(addr) => {
-                        print!(" {0:>04X}     ", addr);
-                    },
-                }
-            }
-            print!("pid    pc: code               ");
-            println!("");
+            self.print_header(watchings);
         }
 
         self.kernel.start(&mut self.cpu, &mut self.ram);
         for cyc in 0..MAX_CYCLE {
-            let running_pid = self.kernel.current_proc().get_pid();
             if self.verbose >=2 {
-                for watching in &watchings {
-                    match watching {
-                        Watching::Reg(r) => {
-                            let v = self.cpu.get_register(r.clone());
-                            print!("{0:>5X}    ", v);
-                        },
-                        Watching::Mem(addr) => {
-                            let v = self.ram.read_const_quad(*addr);
-                            print!("{0:>5X}    ", v);
-                        },
-                    }
-                }
-                print!("{0:>3} {1:>5X}: ", running_pid, self.cpu.get_pc());
+                self.print_log_1(watchings);
             }
+
             let (fetched, res_cpu) = self.cpu.cycle(&mut self.ram);
-            // FIXME: define timer here
             let res_cpu = if cyc > 0 && cyc % 5 == 0 {
                 Err(Exception::TimerInterrupt)
             } else {
@@ -82,14 +56,7 @@ impl Computer {
             self.console.cycle(&mut self.ram);
 
             if self.verbose >= 2 {
-                print!("{0}", fetched);
-                
-                println!("");
-                if self.verbose >= 3 {
-                    self.print_stack();
-                    self.print_ram();
-                    println!("");
-                }
+                self.print_log_2(&fetched);
             }
 
             let stat = match res_cpu {
@@ -105,6 +72,50 @@ impl Computer {
             }
         }
         None            
+    }
+
+    fn print_header(&self, watchings: &Vec<Watching>) {
+        println!("");
+        for watching in watchings {
+            match watching {
+                Watching::Reg(r) => {
+                    let r = format!("{0:?}", r).to_ascii_lowercase();
+                    print!(" %{0:<7}", r)
+                },
+                Watching::Mem(addr) => {
+                    print!(" {0:>04X}     ", addr);
+                },
+            }
+        }
+        print!("pid    pc: code               ");
+        println!("");
+    }
+
+    fn print_log_1(&self, watchings: &Vec<Watching>) {
+        let running_pid = self.kernel.current_proc().get_pid();
+        for watching in watchings {
+            match watching {
+                Watching::Reg(r) => {
+                    let v = self.cpu.get_register(r.clone());
+                    print!("{0:>5X}    ", v);
+                },
+                Watching::Mem(addr) => {
+                    let v = self.ram.read_const_quad(*addr);
+                    print!("{0:>5X}    ", v);
+                },
+            }
+        }
+        print!("{0:>3} {1:>5X}: ", running_pid, self.cpu.get_pc());
+    }
+
+    fn print_log_2(&self, fetched: &Fetched) {
+        print!("{0}", fetched);
+        println!("");
+        if self.verbose >= 3 {
+            self.print_stack();
+            self.print_ram();
+            println!("");
+        }
     }
 
     pub fn print_ram(&self) {

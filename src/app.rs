@@ -8,7 +8,7 @@ use crate::{
 const MEM_SIZE: usize = 1024 * 1024;
 
 // Y86_64 simulator
-pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize, usize)>, num_proc: usize, display_opts: Vec<Watching>) -> u64 {
+pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize, usize)>, num_proc: usize, watchings: Vec<Watching>) -> u64 {
     let extension = Path::new(filename)
         .extension()
         .and_then(OsStr::to_str)
@@ -73,7 +73,7 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
         if log_level >= 0 {
             println!("yis start");
         }
-        let maybe_res = computer.start(display_opts);
+        let maybe_res = computer.start(&watchings);
         match maybe_res {
             Some((cycle, res)) => {
                 if log_level >= 0 {
