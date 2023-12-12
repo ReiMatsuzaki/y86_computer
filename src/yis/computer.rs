@@ -33,12 +33,20 @@ impl Computer {
     pub fn start(&mut self) -> Option<(u64, u64)> {
         if self.verbose >= 2 {
             println!("");
-            println!("pid code        %rax %rbx")
+            print!(" %rax     ");
+            print!(" %rbx     ");
+            print!("pid    pc: code               ");
+            println!("");
         }
 
         self.kernel.start(&mut self.cpu, &mut self.ram);
         for cyc in 0..MAX_CYCLE {
             let running_pid = self.kernel.current_proc().get_pid();
+            if self.verbose >=2 {
+                print!("{0:>5X}     ", self.cpu.get_register(Y8R::RAX));
+                print!("{0:>5X}     ", self.cpu.get_register(Y8R::RBX));
+                print!("{0:>3} {1:>5X}: ", running_pid, self.cpu.get_pc());
+            }
             let (fetched, res_cpu) = self.cpu.cycle(&mut self.ram);
             // FIXME: define timer here
             let res_cpu = if cyc > 0 && cyc % 5 == 0 {
@@ -49,8 +57,8 @@ impl Computer {
             self.console.cycle(&mut self.ram);
 
             if self.verbose >= 2 {
-                print!("{0:>2} 0x{1:0>5X}: {2:>50}  ", running_pid, self.cpu.get_pc(), fetched);
-                print!("0x{0:0<4X}  0x{1:0<4X}", self.cpu.get_register(Y8R::RAX), self.cpu.get_register(Y8R::RBX));
+                print!("{0}", fetched);
+                
                 println!("");
                 if self.verbose >= 3 {
                     self.print_stack();

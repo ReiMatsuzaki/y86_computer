@@ -19,37 +19,37 @@ impl fmt::Display for Fetched {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fn g(r: u8) -> String {
             match decode_register(r) {
-                Some(r) => format!("{:?}", r),
-                None => "None".to_string(),
+                Some(r) => format!("%{:?}", r).to_ascii_lowercase(),
+                None => "none".to_string(),
             }
         }
         let ra = g(self.ra);
         let rb = g(self.rb);
+        let ff = format!("{:?}", self.code_fn);
         match self.code_fn {
             CodeFn::HALT |
             CodeFn::NOP |
             CodeFn::RET
-            => write!(f, "{:?}", self.code_fn),
+            => write!(f, "{:8}", ff),
 
             CodeFn::RRMOVQ |
             CodeFn::OPQ(_) |
             CodeFn::CMOVXX(_)
-            => write!(f, "{:?}, {1},{2}", self.code_fn, ra, rb),
+            => write!(f, "{:8} {1:<5},{2}", ff, ra, rb),
 
             CodeFn::IRMOVQ
-            => write!(f, "{:?} ${1},{2}", self.code_fn, self.val_c, rb),
+            => write!(f, "{:8} $0x{1:<2X},{2}", ff, self.val_c, rb),
             CodeFn::RMMOVQ |
             CodeFn::MRMOVQ
-             => write!(f, "{:?} {1},0x{3:X}({2})", self.code_fn, ra, rb, self.val_c),
+             => write!(f, "{:8} {1},{3:5X}({2})", ff, ra, rb, self.val_c),
 
             CodeFn::JXX(_) |
             CodeFn::CALL 
-            => write!(f, "{:?} 0x{1:X}", self.code_fn, self.val_c),
+            => write!(f, "{:8} {1:<5X}", ff, self.val_c),
 
             CodeFn::PUSHQ |
             CodeFn::POPQ
-            => write!(f, "{:?} {1}", self.code_fn, ra),
-
+            => write!(f, "{:8} {1:<5}", ff, ra)
         }
     }
 }
