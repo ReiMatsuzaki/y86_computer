@@ -4,7 +4,7 @@ use crate::{
     yas, ycc, yis::computer::Computer,
 };
 
-const INIT_MEM_POS: usize = 0x1000; // 0x1000 = 4096
+// const INIT_MEM_POS: usize = 0x1000; // 0x1000 = 4096
 const MEM_SIZE: usize = 1024 * 1024;
 
 // Y86_64 simulator
@@ -52,7 +52,7 @@ pub fn run(filename: &str, command: &str, log_level: i64, wrange: Option<(usize,
     };
 
     // INIT_POS is meaning less.
-    let mut computer = Computer::new(MEM_SIZE, INIT_MEM_POS, log_level, wrange);
+    let mut computer = Computer::new(MEM_SIZE, log_level, wrange);
 
     println!("load bytes to ram");
     for i in 0..num_proc {

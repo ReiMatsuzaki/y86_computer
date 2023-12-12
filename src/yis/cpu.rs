@@ -70,10 +70,10 @@ fn split_byte(x: u8) -> (u8, u8) {
 type Res<T> = Result<T, Exception>;
 
 impl Cpu {
-    pub fn new(verbose: i64, pc: usize) -> Cpu {
+    pub fn new(verbose: i64) -> Cpu {
         let machine = Cpu {
             regs: [0; 16],
-            pc,
+            pc: 0,
             zf: 0,
             sf: 0,
             of: 0,
@@ -412,7 +412,7 @@ mod tests {
             0x61, 0x23,
             // -> rdx=0x09, rbx=-5
         ];
-        let mut machine = Cpu::new(0, 0);
+        let mut machine = Cpu::new(0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         let neg: u64 = 5;
@@ -426,7 +426,7 @@ mod tests {
             // addq rdx rbx
             0x60, 0x23, // -> rbx=4
         ];
-        let mut machine = Cpu::new(0, 0);
+        let mut machine = Cpu::new(0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0x04, machine.get_register(Y8R::RBX));
@@ -443,7 +443,7 @@ mod tests {
             0x65, 0x20,
             // -> rax=0x02
         ];
-        let mut machine = Cpu::new(0, 0);
+        let mut machine = Cpu::new(0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0x24, machine.get_register(Y8R::RBX));
@@ -463,7 +463,7 @@ mod tests {
             0x24, 0x02,
         ];
         let mut ram = Ram::new(MEM_SIZE);
-        let mut machine = Cpu::new(0, 0);
+        let mut machine = Cpu::new(0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(0, machine.get_register(Y8R::RCX));
@@ -479,7 +479,7 @@ mod tests {
             0x24, 0x02,
         ];
         let mut ram = Ram::new(MEM_SIZE);
-        let mut machine = Cpu::new(0, 0);
+        let mut machine = Cpu::new(0);
         ram.load(0, &insts);
         machine.start(&mut ram);
         assert_eq!(9, machine.get_register(Y8R::RCX));
