@@ -47,11 +47,15 @@ impl Computer {
                 self.print_log_1(watchings);
             }
 
+            // FIXME: clean code
             let (fetched, res_cpu) = self.cpu.cycle(&mut self.ram);
-            let res_cpu = if cyc > 0 && cyc % 5 == 0 {
-                Err(Exception::TimerInterrupt)
-            } else {
-                res_cpu
+            let res_cpu = match res_cpu {
+                Ok(s) => if cyc > 0 && cyc % 5 == 0 {
+                        Err(Exception::TimerInterrupt)
+                    } else {
+                        Ok(s)
+                    },
+                Err(e) => Err(e)
             };
             self.console.cycle(&mut self.ram);
 

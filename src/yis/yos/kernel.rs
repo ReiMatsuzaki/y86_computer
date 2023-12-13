@@ -32,7 +32,7 @@ impl Kernel {
 
     fn switch(&mut self, cpu: &mut Cpu, ram: &mut Ram, next_pid: u32) {
         let proc1 = &mut self.proc_table[self.current_pid as usize];
-        proc1.go_ready(cpu, ram);
+        proc1.go_ready(cpu);
         let next_proc = &mut self.proc_table[next_pid as usize];
         next_proc.go_running(cpu, ram);
         self.current_pid = next_pid;
@@ -93,16 +93,17 @@ impl Kernel {
 
                 // store 0 to child and new pid to parent
                 cpu.set_register(Y8R::RAX, 0);
-                proc.go_ready(cpu, ram);
+                proc.go_ready(cpu);
                 cpu.set_register(Y8R::RAX, pid.into());
                 self.proc_table.push(proc);
                 Y8S::AOK
             },
             60 => {
                 println!("==== Kernel: exit({}) ====", arg1);
-                self.proc_table[self.current_pid as usize].exit();
+                let old_pid = self.current_pid as usize;
                 if let Some(next_pid) = self.get_next_pid() {
                     self.switch(cpu, ram, next_pid);
+                    self.proc_table[old_pid].exit();
                     Y8S::AOK
                 } else {
                     Y8S::HLT

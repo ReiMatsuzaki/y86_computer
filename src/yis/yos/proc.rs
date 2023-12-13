@@ -18,6 +18,8 @@ impl Proc {
                 rbx: 0,
                 rcx: 0,
                 rdx: 0,
+                rdi: 0,
+                rsi: 0,
                 rsp: INIT_SP,
                 rpb: 0,
                 pc: 0x1000, // FIXME: 0x1000 is equal to INIT_POS in app.rs
@@ -42,23 +44,25 @@ impl Proc {
         cpu.set_register(Y8R::RBX, self.context.rbx);
         cpu.set_register(Y8R::RCX, self.context.rcx);
         cpu.set_register(Y8R::RDX, self.context.rdx);
+        cpu.set_register(Y8R::RDI, self.context.rdi);
+        cpu.set_register(Y8R::RSI, self.context.rsi);
         cpu.set_register(Y8R::RSP, self.context.rsp);
         cpu.set_register(Y8R::RBP, self.context.rpb);
         cpu.set_pc(self.context.pc);
         ram.set_base_bound(self.mem_base, self.mem_bound);
     }
 
-    pub fn go_ready(&mut self, cpu: &Cpu, ram: &Ram) {
+    pub fn go_ready(&mut self, cpu: &Cpu) {
         self.state = ProcState::Ready;
         self.context.rax = cpu.get_register(Y8R::RAX);
         self.context.rbx = cpu.get_register(Y8R::RBX);
         self.context.rcx = cpu.get_register(Y8R::RCX);
         self.context.rdx = cpu.get_register(Y8R::RDX);
+        self.context.rsi = cpu.get_register(Y8R::RSI);
+        self.context.rdi = cpu.get_register(Y8R::RDI);
         self.context.rsp = cpu.get_register(Y8R::RSP);
         self.context.rpb = cpu.get_register(Y8R::RBP);
         self.context.pc = cpu.get_pc();
-        // FIXME: unnecessary?
-        (self.mem_base, self.mem_bound) = ram.get_base_bound();
     }
 
     pub fn exit(&mut self) {
@@ -74,6 +78,8 @@ struct Context {
     rdx: u64,
     rsp: u64,
     rpb: u64,
+    rsi: u64,
+    rdi: u64,
     pc: usize,
 }
 

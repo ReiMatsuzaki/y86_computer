@@ -1,8 +1,11 @@
 int main() {
   int a;
-  int b;
-  syscall(57, 0, 0);
-  a = 1;
-  b = 2;
-  return a + b;
+  a = syscall(57, 0, 0); // fork
+  if (a) {
+    // parent
+    syscall(60, 0, 0); // exit
+  }
+  // child
+  a = a + 1;
+  return a;
 }

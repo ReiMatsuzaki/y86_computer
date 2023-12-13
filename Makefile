@@ -77,4 +77,4 @@ ycc_plus_2: ${BIN} ./y86/tests/plus.yc
 
 ycc15: ${BIN} ./y86/tests/15fork.yc
 		@echo "test fork"
-		${BIN} run ./y86/tests/15fork.yc --log-level 2 -w rax,rdi,rsi
+		${BIN} run ./y86/tests/15fork.yc --log-level 2 -w rax,rbx,rbp
