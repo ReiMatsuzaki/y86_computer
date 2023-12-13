@@ -80,13 +80,22 @@ impl Kernel {
                 println!("==== Kernel: fork() ====");
                 let (old_base, bound) = ram.get_base_bound();
                 let new_base = self.proc_table.len() * bound;
+                // copy memory
                 for addr in 0..bound {
                     ram.set_base_bound(old_base, bound);
                     let b = ram.read(addr);
                     ram.set_base_bound(new_base, bound);
                     ram.write(addr, b);
                 }
-                self.add_proc(new_base, bound);
+
+                let pid = self.proc_table.len() as u32;
+                let mut proc = Proc::new(pid, new_base, bound);
+
+                // store 0 to child and new pid to parent
+                cpu.set_register(Y8R::RAX, 0);
+                proc.go_ready(cpu, ram);
+                cpu.set_register(Y8R::RAX, pid.into());
+                self.proc_table.push(proc);
                 Y8S::AOK
             },
             60 => {

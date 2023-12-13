@@ -1,5 +1,6 @@
 use crate::{yis::{inst::Y8R, cpu::Cpu, ram::Ram}, ycc::INIT_SP};
 
+#[derive(Debug)]
 pub struct Proc {
     pid: u32,
     context: Context,
@@ -56,6 +57,7 @@ impl Proc {
         self.context.rsp = cpu.get_register(Y8R::RSP);
         self.context.rpb = cpu.get_register(Y8R::RBP);
         self.context.pc = cpu.get_pc();
+        // FIXME: unnecessary?
         (self.mem_base, self.mem_bound) = ram.get_base_bound();
     }
 
@@ -64,6 +66,7 @@ impl Proc {
     }
 }
 
+#[derive(Debug)]
 struct Context {
     rax: u64,
     rbx: u64,
@@ -74,7 +77,7 @@ struct Context {
     pc: usize,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum ProcState {
     Ready,
     Running,

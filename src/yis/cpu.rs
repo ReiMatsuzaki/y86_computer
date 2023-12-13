@@ -42,7 +42,7 @@ impl fmt::Display for Fetched {
             => write!(f, "{:8} $0x{1:<3X},{2}", ff, self.val_c, rb),
             CodeFn::RMMOVQ |
             CodeFn::MRMOVQ
-             => write!(f, "{:8} {1},{3:6X}({2})", ff, ra, rb, self.val_c),
+             => write!(f, "{:8} {1} ,{3:X}({2})", ff, ra, rb, self.val_c),
 
             CodeFn::JXX(_) |
             CodeFn::CALL 
