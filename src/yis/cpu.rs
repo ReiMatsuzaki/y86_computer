@@ -29,7 +29,8 @@ impl fmt::Display for Fetched {
         match self.code_fn {
             CodeFn::HALT |
             CodeFn::NOP |
-            CodeFn::RET
+            CodeFn::RET |
+            CodeFn::SYSCALL
             => write!(f, "{:8}", ff),
 
             CodeFn::RRMOVQ |
@@ -119,6 +120,8 @@ impl Cpu {
         let (val_p, c0): (usize, usize) = match code_fn {
             CodeFn::HALT => (self.pc + 1, self.pc + 2),
             CodeFn::NOP => (self.pc + 1, self.pc + 2),
+            CodeFn::SYSCALL => (self.pc + 1, self.pc + 2),
+
             CodeFn::RRMOVQ => (self.pc + 2, self.pc + 2),
             CodeFn::IRMOVQ => (self.pc + 10, self.pc + 2),
             CodeFn::RMMOVQ => (self.pc + 10, self.pc + 2),
@@ -155,6 +158,8 @@ impl Cpu {
         let (dst_e, dst_m) = match fetched.code_fn {
             CodeFn::HALT => (0xF, 0xF),
             CodeFn::NOP => (0xF, 0xF),
+            CodeFn::SYSCALL => (0xF, 0xF),
+
             CodeFn::IRMOVQ => (src_b, 0xF),
             CodeFn::RRMOVQ => (src_b, 0xF),
             CodeFn::RMMOVQ => (0xF, 0xF),
@@ -201,6 +206,8 @@ impl Cpu {
         let val_e: u64 = match f.code_fn {
             CodeFn::HALT => 0,
             CodeFn::NOP => 0,
+            CodeFn::SYSCALL => 0,
+
             CodeFn::RRMOVQ => va,
             CodeFn::IRMOVQ => vc,
             CodeFn::RMMOVQ => vb + vc,
@@ -234,6 +241,8 @@ impl Cpu {
         let val_m = match f.code_fn {
             CodeFn::HALT => 0,
             CodeFn::NOP => 0,
+            CodeFn::SYSCALL => 0,
+
             CodeFn::RRMOVQ => 0,
             CodeFn::IRMOVQ => 0,
             CodeFn::RMMOVQ => {
@@ -304,10 +313,12 @@ impl Cpu {
         self.write(&fetched, &decoded, &executed, &memoried);
 
         if fetched.code_fn == CodeFn::OPQ(OpqFn::DIV) && decoded.val_a == 0 {
-            return (fetched, Err(Exception::DivideError));
+            (fetched, Err(Exception::DivideError))
+        } else if fetched.code_fn == CodeFn::SYSCALL {
+            (fetched, Err(Exception::Syscall))
+        } else {
+            (fetched, Ok(self.stat.clone()))
         }
-
-        (fetched, Ok(self.stat.clone()))
     }
     pub fn get_register(&self, r: Y8R) -> u64 {
         return self.regs[r as usize];

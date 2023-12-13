@@ -53,9 +53,11 @@ impl Kernel {
                 Y8S::AOK
             },
             Exception::TimerInterrupt => {
-                println!("===== Kernel: timer interrupt found. context switch. ====");
                 if let Some(next_pid) = self.get_next_pid() {
+                    println!("===== Kernel: timer interrupt found. context switch. ====");
                     self.switch(cpu, ram, next_pid);
+                } else {
+                    println!("===== Kernel: timer interrupt found. ====");
                 }
                 Y8S::AOK
             },
@@ -63,6 +65,41 @@ impl Kernel {
                 println!("==== Kernel: protection fault found. Shutdown ====");
                 Y8S::HLT
             },
+            Exception::Syscall => {
+                self.handle_syscall(cpu, ram)
+            },
+        }
+    }
+
+    fn handle_syscall(&mut self, cpu: &mut Cpu, ram: &mut Ram) -> Y8S {
+        let number = cpu.get_register(Y8R::RAX);
+        let arg1 = cpu.get_register(Y8R::RDI);
+        // let arg2 = cpu.get_register(Y8R::RSI);
+        match number {
+            57 => {
+                println!("==== Kernel: fork() ====");
+                let (old_base, bound) = ram.get_base_bound();
+                let new_base = self.proc_table.len() * bound;
+                for addr in 0..bound {
+                    ram.set_base_bound(old_base, bound);
+                    let b = ram.read(addr);
+                    ram.set_base_bound(new_base, bound);
+                    ram.write(addr, b);
+                }
+                self.add_proc(new_base, bound);
+                Y8S::AOK
+            },
+            60 => {
+                println!("==== Kernel: exit({}) ====", arg1);
+                self.proc_table[self.current_pid as usize].exit();
+                if let Some(next_pid) = self.get_next_pid() {
+                    self.switch(cpu, ram, next_pid);
+                    Y8S::AOK
+                } else {
+                    Y8S::HLT
+                }
+            },
+            _ => panic!("not implemented. syscall number={}", number),
         }
     }
 }

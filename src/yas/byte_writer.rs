@@ -125,6 +125,8 @@ impl ByteWriter {
             Code::Ret => self.write_byte(0x90),
             Code::Pushq(ra) => self.write_fn_ra_rb(0xA0, &ra, &Register::RNONE),
             Code::Popq(ra) => self.write_fn_ra_rb(0xB0, &ra, &Register::RNONE),
+
+            Code::Syscall => self.write_byte(0xC0),
         };
         self.pos_code += 1;
         res

@@ -58,6 +58,10 @@ impl Proc {
         self.context.pc = cpu.get_pc();
         (self.mem_base, self.mem_bound) = ram.get_base_bound();
     }
+
+    pub fn exit(&mut self) {
+        self.state = ProcState::Terminated;
+    }
 }
 
 struct Context {
@@ -75,5 +79,5 @@ enum ProcState {
     Ready,
     Running,
     // Blocked,
-    // Terminated,
+    Terminated,
 }

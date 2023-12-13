@@ -3,6 +3,7 @@ pub enum Exception {
     DivideError,
     ProtectionFault,
     TimerInterrupt,
+    Syscall,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -86,6 +87,7 @@ pub enum CodeFn {
     RET,
     PUSHQ,
     POPQ,
+    SYSCALL,
 }
 
 pub fn decode_register(x: u8) -> Option<Y8R> {
@@ -134,6 +136,7 @@ pub fn decode_codefn(x: u8) -> Option<CodeFn> {
         0x90 => Some(CodeFn::RET),
         0xA0 => Some(CodeFn::PUSHQ),
         0xB0 => Some(CodeFn::POPQ),
+        0xC0 => Some(CodeFn::SYSCALL),
         _ => None,
     }
 }

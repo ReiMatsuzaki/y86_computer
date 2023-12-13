@@ -275,17 +275,29 @@ impl Coder {
                     codes.append(&mut self.code_expr(&args[i]));
                 }
                 // stack = .. .. .. a1 a2   (a1 and a2 are argument)
-                // call
-                codes.push(Code::Call(Expr::Label(name.to_string())));
-                // stack = .. .. .. a1 a2
-                // pop args on stack
-                for _ in 0..args.len() {
-                    codes.push(Code::Popq(Register::RCX));
+                if name.eq("syscall") {
+                    assert!(args.len() == 3);
+                    codes.append(&mut vec![
+                        Code::Popq(Register::RSI),
+                        Code::Popq(Register::RDI),
+                        Code::Popq(Register::RAX),
+                        Code::Syscall,
+                        Code::Pushq(Register::RAX),
+                    ]);
+                } else {
+                    // call
+                    codes.push(Code::Call(Expr::Label(name.to_string())));
+                    // stack = .. .. .. a1 a2
+                    // pop args on stack
+                    for _ in 0..args.len() {
+                        codes.push(Code::Popq(Register::RCX));
+                    }
+                    // stack = .. .. .. .. ..
+                    // push function return value
+                    codes.push(Code::Pushq(Register::RAX));
+                    // stack = .. .. .. .. RV   (RV is return value)
                 }
-                // stack = .. .. .. .. ..
-                // push function return value
-                codes.push(Code::Pushq(Register::RAX));
-                // stack = .. .. .. .. RV   (RV is return value)
+
                 codes
             }
             _ => panic!("unexpected node in code_expr. node={:?}", node),

@@ -71,6 +71,10 @@ ycc14: ${BIN} ./y86/tests/14exception.yc
 		@echo "test div 0 exception"
 		${BIN} run ./y86/tests/14exception.yc --log-level 0 --watch-memory-range 0:300
 
-ycc15: ${BIN} ./y86/tests/plus.yc
+ycc_plus_2: ${BIN} ./y86/tests/plus.yc
 		@echo "test 2+4 with two process"
 		${BIN} run ./y86/tests/plus.yc --log-level 2 --num-proc 2 -w rax,rbx
+
+ycc15: ${BIN} ./y86/tests/15fork.yc
+		@echo "test fork"
+		${BIN} run ./y86/tests/15fork.yc --log-level 2 -w rax,rdi,rsi

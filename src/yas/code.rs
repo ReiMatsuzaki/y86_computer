@@ -79,4 +79,5 @@ pub enum Code {
     Ret,
     Pushq(Register),
     Popq(Register),
+    Syscall,
 }
