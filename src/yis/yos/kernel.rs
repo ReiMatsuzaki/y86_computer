@@ -1,10 +1,12 @@
 use crate::yis::{inst::Y8R, ram::Ram};
 
-use super::{super::{inst::{Exception, Y8S}, cpu::Cpu}, proc::Proc};
+use super::{super::{inst::{Exception, Y8S}, cpu::Cpu}, proc::Proc, fs::{FileSystem, File}};
 
 pub struct Kernel {
     proc_table: Vec<Proc>,
     current_pid: u32,
+    fs: FileSystem,
+    file_table: Vec<File>,
 }
 
 impl Kernel {
@@ -12,10 +14,14 @@ impl Kernel {
         Kernel {
             proc_table: Vec::new(),
             current_pid: 0,
+            fs: FileSystem::new(),
+            file_table: Vec::new(),
         }
     }
 
     pub fn start(&mut self, cpu: &mut Cpu, ram: &mut Ram) {
+        self.fs.create_dir(None).unwrap();
+
         let proc = &mut self.proc_table[self.current_pid as usize];
         proc.go_running(cpu, ram);
     }
@@ -74,8 +80,25 @@ impl Kernel {
     fn handle_syscall(&mut self, cpu: &mut Cpu, ram: &mut Ram) -> Y8S {
         let number = cpu.get_register(Y8R::RAX);
         let arg1 = cpu.get_register(Y8R::RDI);
-        // let arg2 = cpu.get_register(Y8R::RSI);
+        let arg2 = cpu.get_register(Y8R::RSI);
+        let arg3 = cpu.get_register(Y8R::RDX);
         match number {
+            0 => {
+                let res = self.read(arg1 as usize, arg2 as usize, arg3 as usize, ram);
+                cpu.set_register(Y8R::RAX, res);
+                Y8S::AOK
+            }
+            1 => {
+                let res = self.write(arg1 as usize, arg2 as usize, arg3 as usize, ram);
+                cpu.set_register(Y8R::RAX, res);
+                Y8S::AOK
+            },
+            2 => self.open(cpu, ram),
+            3 => {
+                let res = self.close(arg1 as usize);
+                cpu.set_register(Y8R::RAX, res);
+                Y8S::AOK
+            },
             57 => {
                 println!("==== Kernel: fork() ====");
                 let (old_base, bound) = ram.get_base_bound();
@@ -87,7 +110,6 @@ impl Kernel {
                     ram.set_base_bound(new_base, bound);
                     ram.write(addr, b);
                 }
-
                 let pid = self.proc_table.len() as u32;
                 let mut proc = Proc::new(pid, new_base, bound);
 
@@ -111,5 +133,58 @@ impl Kernel {
             },
             _ => panic!("not implemented. syscall number={}", number),
         }
+    }
+    fn read(&mut self, fd: usize, addr_buf: usize, len: usize, ram: &mut Ram) -> u64 {
+        println!("==== Kernel: read(int fd, char* buf, int len) ====");
+        let file = &mut self.file_table[fd];
+        if len >= 100 {
+            panic!("too long buffer");
+        }
+        let mut buf = [0u8; 100];
+        self.fs.read(file, &mut buf, len).unwrap();
+
+        for i in 0..len {
+            ram.write(addr_buf + 8 * i, buf[i]);
+        }        
+        1
+    }
+
+    fn write(&mut self, fd: usize, addr_buf: usize, len: usize, ram: &mut Ram) -> u64 {
+        println!("==== Kernel: write(int fd, char* buf, int len) ====");
+        let file = &mut self.file_table[fd];
+        if len >= 100 {
+            panic!("too long buffer");
+        }
+        let mut buf = [0u8; 100];
+        for i in 0..len {
+            buf[i] = ram.read(addr_buf + 8 * i);
+        }
+        self.fs.write(file, &mut buf, len).unwrap();
+        1
+    }
+
+    fn open(&mut self, cpu: &mut Cpu, _: &mut Ram) -> Y8S {
+            println!("==== Kernel: open(char* filename) ====");
+            let root_inode = self.fs.read_inode(0).unwrap();
+            // FIXME: filename from ram
+            let filename = "test.txt";
+            let filepath = "/test.txt";
+            if let Ok(_) = self.fs.find(filepath) {
+                panic!("==== Kernel: file already exists. stop ====");
+            }
+
+            // FIXME: control flag. open, append, etc.
+            let file = self.fs.create_file(&root_inode, filename).unwrap();
+            let fd = self.file_table.len();
+            self.file_table.push(file);
+            cpu.set_register(Y8R::RAX, fd as u64);
+            Y8S::AOK
+    }
+
+    fn close(&mut self, fd: usize) -> u64 {
+        println!("==== Kernel: close(int fd) ====");
+        // FIXME: free inode and data block
+        self.file_table.remove(fd);
+        1
     }
 }

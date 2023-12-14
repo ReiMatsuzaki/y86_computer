@@ -17,7 +17,6 @@ pub struct FileSystem {
 #[derive(Debug)]
 pub enum FileSystemError {
     FileNotFound,
-    FileTooLarge,
     OutOfSector,
     ExceedingBlockLimit,
     InvalidINodeMode,
@@ -34,7 +33,7 @@ impl FileSystem {
         }
     }
 
-    fn read_inode(&self, inum: usize) -> Result<INode, FileSystemError> {
+    pub fn read_inode(&self, inum: usize) -> Result<INode, FileSystemError> {
         if !(self.read_bmap(inum, IBMAP_OFFSET)?) {
             return Err(FileSystemError::UnAllocated);
         }
@@ -77,7 +76,7 @@ impl FileSystem {
         self.disk.write_sector(sector, &mut buf)
             .ok_or(FileSystemError::OutOfSector)?;
 
-        self.write_bmap(inode.inum, 1 * BLOCK_BYTES, true);
+        self.write_bmap(inode.inum, 1 * BLOCK_BYTES, true)?;
 
         Ok(())
     }
@@ -194,7 +193,7 @@ impl FileSystem {
         Ok(())
     }
 
-    fn create_dir(&mut self, parent: Option<(&INode, String)>) -> Res<INode> {
+    pub fn create_dir(&mut self, parent: Option<(&INode, String)>) -> Res<INode> {
         let inum = self.alloc_bmap(IBMAP_OFFSET)?;
         let dnum = self.alloc_bmap(DBMAP_OFFSET)?;
 
@@ -235,191 +234,115 @@ impl FileSystem {
         Ok(inode)
     }
 
+    pub fn read(&self, file: &mut File, buf: &mut [u8], len: usize) -> Res<usize> {
+        if file.inode.mode != INodeMode::RegularFile {
+            return Err(FileSystemError::InvalidINodeMode);
+        }
+        assert!(file.inode.num_block == 1);
+        let dnum = file.inode.blocks[0] as usize;
+        let sector = (DATA_REGION_OFFSET + dnum * BLOCK_BYTES) / SECTOR_BYTES;
 
-    // pub fn create_root(&mut self) -> Res<()> {
-    //     // let inode = INode {
-    //     //     size: 0,
-    //     //     num_block: 1,
-    //     //     blocks: [0; 15], 
-    //     //     mode: INodeMode::Directory,
-    //     // };
-    //     // let mut block_buf = [0; 4*1024];
-    //     // let mut i = 0;
-    //     // let mut off = 0;
-    //     // let mut block_addr = 0;
-    //     // write_as_words(&mut block_buf, off, inode.size);
-    //     // off += 8;
-    //     // block_buf[off] = inode.num_block;
-    //     // off += 1;
-    //     // for i in 0..inode.num_block {
-    //     //     write_as_words(&mut block_buf, off + i * 8, inode.blocks[i as usize]);
-    //     // }
-    //     // off += 15 * 8;
-    //     // block_buf[off] = match inode.mode {
-    //     //     INodeMode::RegularFile => 0,
-    //     //     INodeMode::Directory => 1,
-    //     // };
-    //     // off += 1;
-    //     // self.disk.write_block(block_addr, &mut block_buf)
-    //     //     .ok_or(FileSystemError::BadBlockAddr)?;
-    //     Ok(())
-    // }
+        let mut sector_buf = [0u8; SECTOR_BYTES];
+        self.disk.read_sector(sector, &mut sector_buf);
+        for i in file.off..file.off+len {
+            buf[i] = sector_buf[i];
+        }
 
+        Ok(len)
+    }
 
+    pub fn write(&mut self, file: &mut File, buf: &[u8], len: usize) -> Res<usize> {
+        if file.inode.mode != INodeMode::RegularFile {
+            return Err(FileSystemError::InvalidINodeMode);
+        }
+        assert!(file.inode.num_block == 1);
+        let dnum = file.inode.blocks[0] as usize;
+        let sector = (DATA_REGION_OFFSET + dnum * BLOCK_BYTES) / SECTOR_BYTES;
 
-    // fn read(&self, file: &mut File, buf: &mut [u8], len: usize) -> Res<usize> {
-    //     if file.inode.mode != INodeMode::Directory {
-    //         return Err(FileSystemError::InvalidINodeMode);
-    //     }
+        let mut sector_buf = [0u8; SECTOR_BYTES];
 
-    //     let mut block_buf = [0; 4*1024];
-    //     let inode = &file.inode;
-    //     let mut i = 0;
-    //     let mut off = file.off; 
-    //     for iblock in 0..inode.num_block {
-    //         let block_addr = inode.blocks[iblock as usize] as usize;
-    //         self.disk.read_block(block_addr, &mut block_buf)
-    //             .ok_or(FileSystemError::BadBlockAddr)?;
-    //         while i < len && off < (1+iblock as usize)*4*1024 {
-    //             buf[i] = block_buf[off  % (4*1024)];
-    //             i += 1;
-    //             off += 1;
-    //         }
-    //     }
-    //     file.off = off;
-    //     Ok(len)
-    // }
+        for i in file.off..file.off+len {
+            sector_buf[i] = buf[i];
+        }
+        file.off = file.off + len;
+        self.disk.write_sector(sector, &mut sector_buf);
 
-    // fn write(&mut self, file: &mut File, buf: &[u8], len: usize) -> Res<usize> {
-    //     if file.inode.mode != INodeMode::Directory {
-    //         return Err(FileSystemError::InvalidINodeMode);
-    //     }
-    //     let mut block_buf = [0; 4*1024];
-    //     let inode = &file.inode;
-    //     let mut i = 0;
-    //     let mut off = file.off; 
-    //     for iblock in 0..inode.num_block {
-    //         while i < len && off < (1+iblock as usize)*4*1024 {
-    //             block_buf[off  % (4*1024)] = buf[i];
-    //             i += 1;
-    //             off += 1;
-    //         }
+        Ok(len)
+    }
 
-    //         let block_addr = inode.blocks[iblock as usize] as usize;
-    //         self.disk.write_block(block_addr, &mut block_buf)
-    //             .ok_or(FileSystemError::BadBlockAddr)?;
-    //     }
-    //     file.off = off;
-    //     Ok(len)        
-    // }
+    pub fn create_file(&mut self, parent: &INode, name: &str) -> Res<File> {
+        let inum = self.alloc_bmap(IBMAP_OFFSET)?;
+        let dnum = self.alloc_bmap(DBMAP_OFFSET)?;
 
-    // fn get_directory(&self, inode: &INode) -> Res<Directory> {
-    //     if inode.mode != INodeMode::Directory {
-    //         return Err(FileSystemError::InvalidINodeMode);
-    //     }
+        let mut inode_dir = self.read_inode(parent.inum)?;
+        let mut dir = self.read_dir(&inode_dir)?;
+        dir.dirents.push(Dirent {
+            inum,
+            name: name.to_string(),
+        });
+        inode_dir.size += 25;
+        self.write_inode(&inode_dir)?;
+        self.write_dir(&inode_dir, &dir)?;
 
-    //     let mut block_buf = [0u8; BLOCK_BYTES];
-    //     let block_addr = inode.blocks[0] as usize;
-    //     self.disk.read_block(block_addr, &mut block_buf);
+        let mut blocks: [u64; 15] = [0; 15];
+        blocks[0] = dnum as u64;
+        let inode = INode {
+            inum,
+            size: 0,
+            num_block: 1,
+            blocks,
+            mode: INodeMode::RegularFile,
+        };
 
-    //     let mut i = 0;
-    //     let mut dirents = vec![];
-    //     while block_buf[i] != 0x0 {
-    //         let inum = read_as_words(&block_buf, i) as usize;
-    //         i += 8;
-    //         let name_len = block_buf[i] as usize;
-    //         i += 1;
-    //         let mut name = [0u8; 16];
-    //         for j in 0..16 {
-    //             name[j] = block_buf[i + j]
-    //         }
-    //         i += 16;
-    //         let name = &name[..name_len];
-    //         let name = String::from_utf8(name.to_vec())
-    //             .map_err(|_| FileSystemError::FileNotFound)?; // FIXME: error handling
-    //         dirents.push(Dirent {inum, name});
-    //     }
-    //     Ok(Directory {dirents})
-    // }
+        self.write_inode(&inode)?;
 
-    // fn find_inode(&self, inum: usize) -> Result<INode, FileSystemError> {
-    //     let mut block_buf = [0; 4*1024];
+        let file = File::new(inode);
+        Ok(file)
+    }
 
-    //     self.disk.read_block(INODE_REGION_OFFSET + inum / 16, &mut block_buf)
-    //        .ok_or(FileSystemError::FileNotFound)?;
-    //     let offset = 256 * (inum % 16);
-    //     let size = read_as_words(&block_buf, offset);
-    //     let num_block = block_buf[offset + 8];
-    //     let mut blocks = [0; 15];
-    //     for i in 0..num_block {
-    //         let i = i as usize;
-    //         blocks[i] = read_as_words(&block_buf, offset + 9 + i * 8);
-    //     }
-    //     let mode = block_buf[offset + 9 + 15 * 8];
-    //     let mode = match mode {
-    //         0 => INodeMode::RegularFile,
-    //         1 => INodeMode::Directory,
-    //         _ => return Err(FileSystemError::InvalidINodeMode),
-    //     };
-    //     Ok(INode {size, num_block, blocks, mode})
-    // }
+    fn find_for_dir(&self, dir: &Directory, name: &str) -> Result<INode, FileSystemError> {
+        if let Some(i) = name.find("/") {
+            // dir
+            let dir_name = &name[..i];
+            let resid_name = &name[(i+1)..];
+            let dirent = dir.dirents.iter().find(|d| d.name.eq(dir_name))
+                .ok_or(FileSystemError::FileNotFound)?;
+            let inode = self.read_inode(dirent.inum as usize)?;
+            let dir = &self.read_dir(&inode)?;
+            self.find_for_dir(dir, resid_name)
+        } else {
+            // file
+            let dirent = dir.dirents.iter().find(|d| d.name.eq(name))
+                .ok_or(FileSystemError::FileNotFound)?;
+            let inode = self.read_inode(dirent.inum as usize)?;
+            Ok(inode)
+        }
+    }
 
-    // fn find_by_name_under_dir(&self, dir: &Directory, name: &str) -> Result<INode, FileSystemError> {
-    //     // let dir = self.get_directory(inode)?;
-    //     if let Some(i) = name.find("/") {
-    //         // dir
-    //         let dir_name = &name[..i];
-    //         let resid_name = &name[(i+1)..];
-    //         let dirent = dir.dirents.iter().find(|d| d.name.eq(dir_name))
-    //             .ok_or(FileSystemError::FileNotFound)?;
-    //         let inode = self.find_inode(dirent.inum as usize)?;
-    //         let dir = &self.get_directory(&inode)?;
-    //         return self.find_by_name_under_dir(dir, resid_name)
-    //     } else {
-    //         // file
-    //         let dirent = dir.dirents.iter().find(|d| d.name.eq(name))
-    //             .ok_or(FileSystemError::FileNotFound)?;
-    //         let inode = self.find_inode(dirent.inum as usize)?;
-    //         Ok(inode)
-    //     }
-    // }
-
-    // fn find_by_name(&self, name: &str) -> Result<INode, FileSystemError> {
-    //     // fetch root inode
-    //     let root_inode = self.find_inode(INODE_REGION_OFFSET)?;
-    //     let root_dir = self.get_directory(&root_inode)?;
-    //     if let Some("/") = name.get(0..1) {
-    //         let name = &name[1..];
-    //         self.find_by_name_under_dir(&root_dir, name)
-    //     } else {
-    //         Err(FileSystemError::FileNotFound)
-    //     }
-
-    // }
-
-    // fn create_regular_file(&mut self, dir_inum: usize, name: &str) -> Result<File, FileSystemError> {
-    //     let inode = self.find_inode(dir_inum)?;
-    //     let dir = &mut self.get_directory(&inode)?;
-    //     let new_inum = 1; // FIXME: allocate free block
-    //     dir.dirents.push(Dirent {inum: new_inum, name: String::from(name)});
-
-    //     let inode = INode {
-    //         size: 0,
-    //         num_block: 1,
-    //         blocks: [0; 15], 
-    //         mode: INodeMode::RegularFile,
-    //     };
-    //     // FIXME: save inode and dir to disk
-
-    //     let file = File { inode, off:0 };
-    //     Ok(file)
-    // }
+    pub fn find(&self, name: &str) -> Result<INode, FileSystemError> {
+        // fetch root inode
+        let root_inode = self.read_inode(0)?;
+        let root_dir = self.read_dir(&root_inode)?;
+        if let Some("/") = name.get(0..1) {
+            let name = &name[1..];
+            self.find_for_dir(&root_dir, name)
+        } else {
+            Err(FileSystemError::FileNotFound)
+        }
+    }
 
 }
 
 pub struct File {
     inode: INode,
     off: usize,
+}
+
+#[cfg(test)]
+impl File {
+    pub fn reset(&mut self) {
+        self.off = 0;
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -445,7 +368,7 @@ impl File {
 }
 
 #[derive(Debug, PartialEq)]
-struct INode {
+pub struct INode {
     inum: usize,
     size: usize,
     num_block: u8,
@@ -496,14 +419,12 @@ impl Disk {
     }
 }
 
-// #[derive(Clone, Copy)]
-// struct Block {
-//     bytes: [u8; 4*1024]  // 4K byte per block
-// }
-// impl Block {
-//     pub fn new() -> Block {
-//         Block {
-//             bytes: [0; 4*1024]
+// #[cfg(test)]
+// impl Disk {
+//     fn print(&self, s: usize, len: usize) {
+//         for i in (s/16)..((s+len)/16) {
+//             let j = 16 * i;
+//             println!("{:?}", &self.bytes[j..j+16]);
 //         }
 //     }
 // }
@@ -604,16 +525,40 @@ mod tests {
         
     }
 
-    // #[test]
-    // fn test_read_write() {
-    //     let mut fs = FileSystem::new();
-    //     let mut file = fs.create_regular_file(0, "test.txt").unwrap();
-    //     let buf = "hello world".as_bytes();
-    //     let len = buf.len();
-    //     fs.write(&mut file, buf, len).unwrap();
-    //     let mut buf = [0; 1024];
-    //     fs.read(&mut file, &mut buf, len).unwrap();
-    //     let buf = String::from_utf8(buf.to_vec()).unwrap();
-    //     assert_eq!(buf, "hello world");
-    // }
+    #[test]
+    fn test_file() {
+        let mut fs = FileSystem::new();
+        let inode_root = fs.create_dir(None).unwrap();
+        let mut file = fs.create_file(&inode_root, "file1").unwrap();
+
+        let msg = "hello world";
+        let len = msg.len();
+        let buf = msg.as_bytes();
+        fs.write(&mut file, buf, len).unwrap();
+        file.reset();
+
+        let mut buf = [0; 1024];
+        fs.read(&mut file, &mut buf, len).unwrap();
+        let buf = String::from_utf8(buf[..len].to_vec()).unwrap();
+        assert_eq!(buf, "hello world");
+    }
+
+    #[test]
+    fn test_find_file() {
+        let mut fs = FileSystem::new();
+        let inode_root = fs.create_dir(None).unwrap();
+        
+        let inode_dira = fs.create_dir(Some((&inode_root, "dira".to_string()))).unwrap();
+        let inode_dirb = fs.create_dir(Some((&inode_dira, "dirb".to_string()))).unwrap();
+        let filec = fs.create_file(&inode_dirb, "filec").unwrap();
+
+        // println!("");
+        // fs.disk.print(INODE_REGION_OFFSET + 0 * SECTOR_BYTES, 25);
+        // fs.disk.print(INODE_REGION_OFFSET + 1 * SECTOR_BYTES, 25);
+        // fs.disk.print(INODE_REGION_OFFSET + 2 * SECTOR_BYTES, 25);
+        // fs.disk.print(INODE_REGION_OFFSET + 3 * SECTOR_BYTES, 25);
+
+        let inode = fs.find("/dira/dirb/filec").unwrap();
+        assert_eq!(inode, filec.inode);
+    }
 }
