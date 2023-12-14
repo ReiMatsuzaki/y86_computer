@@ -335,7 +335,7 @@ impl FileSystem {
 
 pub struct File {
     inode: INode,
-    off: usize,
+    pub off: usize,
 }
 
 #[cfg(test)]

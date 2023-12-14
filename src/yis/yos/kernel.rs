@@ -99,6 +99,11 @@ impl Kernel {
                 cpu.set_register(Y8R::RAX, res);
                 Y8S::AOK
             },
+            5 => {
+                let res = self.lseek(arg1 as usize, arg2 as usize, arg3 as usize);
+                cpu.set_register(Y8R::RAX, res);
+                Y8S::AOK                
+            }
             57 => {
                 println!("==== Kernel: fork() ====");
                 let (old_base, bound) = ram.get_base_bound();
@@ -134,6 +139,7 @@ impl Kernel {
             _ => panic!("not implemented. syscall number={}", number),
         }
     }
+
     fn read(&mut self, fd: usize, addr_buf: usize, len: usize, ram: &mut Ram) -> u64 {
         println!("==== Kernel: read(int fd, char* buf, int len) ====");
         let file = &mut self.file_table[fd];
@@ -186,5 +192,16 @@ impl Kernel {
         // FIXME: free inode and data block
         self.file_table.remove(fd);
         1
+    }
+
+    fn lseek(&mut self, fd: usize, off: usize, origin: usize) -> u64 {
+        println!("==== Kernel: lseek(int fd, int offset, int origin) ====");
+        let file = &mut self.file_table[fd];
+        file.off = match origin {
+            0 => off,
+            1 => file.off + off,
+            _ => panic!("not implemented")
+        };
+        file.off as u64
     }
 }

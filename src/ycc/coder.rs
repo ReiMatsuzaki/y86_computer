@@ -276,10 +276,17 @@ impl Coder {
                 }
                 // stack = .. .. .. a1 a2   (a1 and a2 are argument)
                 if name.eq("syscall") {
-                    assert!(args.len() == 3);
+                    assert!(args.len() >= 1 && args.len() <= 4);
+                    if args.len() == 4 {
+                        codes.push(Code::Popq(Register::RDX));
+                    }
+                    if args.len() >= 3 {
+                        codes.push(Code::Popq(Register::RSI));
+                    }
+                    if args.len() >= 2 {
+                        codes.push(Code::Popq(Register::RDI));
+                    }
                     codes.append(&mut vec![
-                        Code::Popq(Register::RSI),
-                        Code::Popq(Register::RDI),
                         Code::Popq(Register::RAX),
                         Code::Syscall,
                         Code::Pushq(Register::RAX),

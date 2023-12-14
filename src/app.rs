@@ -171,5 +171,12 @@ mod tests {
     fn test_fork() {
         let filename = "y86/tests/15fork.yc";
         assert_eq!(0x01, run_file(filename));
+    }
+
+    #[test]
+    fn test_io() {
+        let filename = "y86/tests/16io.yc";
+        let expect: u64 = b'H' as u64;
+        assert_eq!(expect, run_file(filename));
     }    
 }

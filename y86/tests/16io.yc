@@ -1,0 +1,14 @@
+int main() {
+  int* a;
+  int* b;
+  int* fn;
+  int fd;
+  a = "Hello, World!";
+  b = "ooooooooooooo";
+  fn = "text.txt";
+  fd = syscall(2, fn); // open
+  syscall(1, fd, a, 13);  // write
+  syscall(5, fd, 0, 0);   // lseek
+  syscall(0, fd, b, 13);  // read
+  return *b;  // expect 'H'
+}
